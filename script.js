@@ -6,26 +6,35 @@ let whiteTime, blackTime, moveHistory;
 
 // --- 1. SOCKET LISTENERS ---
 socket.on("waiting-for-opponent", () => {
-    document.getElementById('setup-overlay').innerHTML = `<div class="setup-card"><h2>Room Created</h2><p>Waiting for an opponent to join with your password...</p></div>`;
+    const overlay = document.getElementById('setup-overlay');
+    if (overlay) overlay.innerHTML = `<div class="setup-card"><h2>Room Created</h2><p>Waiting for an opponent to join with your password...</p></div>`;
+});
+
+socket.on("error-msg", (msg) => {
+    alert(msg);
 });
 
 socket.on("confirm-settings", (data) => {
     const { settings, creatorName } = data;
     const timeStr = settings.mins === 0 && settings.secs === 0 ? "Unlimited" : `${settings.mins}m ${settings.secs}s (+${settings.inc}s inc)`;
     
-    document.getElementById('setup-overlay').innerHTML = `
-        <div class="setup-card">
-            <h2>Match Found!</h2>
-            <p><b>Opponent:</b> ${creatorName}</p>
-            <p><b>Time Control:</b> ${timeStr}</p>
-            <p><b>Your Color:</b> ${settings.creatorColor === 'white' ? 'Black' : 'White'}</p>
-            <button class="start-btn" id="confirmJoin">ACCEPT & START</button>
-            <button class="secondary-btn" onclick="location.reload()">DECLINE</button>
-        </div>`;
-    
-    document.getElementById('confirmJoin').onclick = () => {
-        socket.emit("join-confirmed", { password: currentPassword, name: document.getElementById('uName').value });
-    };
+    const overlay = document.getElementById('setup-overlay');
+    if (overlay) {
+        overlay.innerHTML = `
+            <div class="setup-card">
+                <h2>Match Found!</h2>
+                <p><b>Opponent:</b> ${creatorName}</p>
+                <p><b>Time Control:</b> ${timeStr}</p>
+                <p><b>Your Color:</b> ${settings.creatorColor === 'white' ? 'Black' : 'White'}</p>
+                <button class="start-btn" id="finalJoinBtn">ACCEPT & START</button>
+                <button class="secondary-btn" onclick="location.reload()">DECLINE</button>
+            </div>`;
+        
+        document.getElementById('finalJoinBtn').onclick = () => {
+            const uName = localStorage.getItem('lastUName') || "Player";
+            socket.emit("join-confirmed", { password: currentPassword, name: uName });
+        };
+    }
 });
 
 socket.on("game-start", (data) => {
@@ -40,7 +49,6 @@ socket.on("game-start", (data) => {
 });
 
 socket.on("assign-color", (color) => { myColor = color; render(); });
-
 socket.on("receive-move", (data) => {
     whiteTime = data.whiteTime; blackTime = data.blackTime;
     handleActualMove(data.move.from, data.move.to, false);
@@ -48,17 +56,16 @@ socket.on("receive-move", (data) => {
 
 socket.on("opponent-resigned", (data) => { if(!isGameOver){ isGameOver = true; render(`${data.winner.toUpperCase()} WINS BY RESIGNATION`); }});
 socket.on("draw-offered", () => {
-    if(isGameOver) return;
     const area = document.getElementById('notification-area');
-    if(area) area.innerHTML = `<div class="draw-modal">Opponent offers draw<div class="modal-btns">
+    if(area && !isGameOver) area.innerHTML = `<div class="draw-modal">Opponent offers draw<div class="modal-btns">
         <button onclick="respondToDraw(true)" style="background:#779556;color:#fff">Accept</button>
         <button onclick="respondToDraw(false)" style="background:#312e2b;color:#aaa">Decline</button>
     </div></div>`;
 });
 socket.on("draw-resolved", (data) => { if(data.accepted && !isGameOver){ isGameOver = true; render("DRAW BY AGREEMENT"); }});
 
-// --- 2. CHESS LOGIC ---
-const isWhite = (c) => ['♖','♘','♗','♕','♔','♙'].includes(c);
+// --- 2. CHESS LOGIC --- (Abbreviated helper functions)
+const isWhite = (c) => ['♖','♙','♘','♗','♖','♕','♔'].includes(c);
 const getTeam = (c) => c === '' ? null : (isWhite(c) ? 'white' : 'black');
 const getPieceNotation = (p) => ({'♖':'R','♘':'N','♗':'B','♕':'Q','♔':'K','♜':'R','♞':'N','♝':'B','♛':'Q','♚':'K'}[p] || '');
 
@@ -128,7 +135,6 @@ function handleActualMove(from, to, isLocal) {
     }
     const files=['a','b','c','d','e','f','g','h'], rows=['8','7','6','5','4','3','2','1'];
     let note = (getPieceNotation(p) || (boardState[to.r][to.c]!==''||isEP?files[from.c]:'')) + (boardState[to.r][to.c]!==''||isEP?'x':'') + files[to.c] + rows[to.r];
-    
     if (isLocal) { if(currentTurn==='white') whiteTime+=increment; else blackTime+=increment; }
     hasMoved[`${from.r},${from.c}`] = 1; 
     boardState[to.r][to.c] = p; boardState[from.r][from.c] = '';
@@ -232,21 +238,25 @@ function updateTimerDisplay() {
 function formatTime(s) { if(isInfinite) return "∞"; const d=Math.max(0,s); return `${Math.floor(d/60)}:${(d%60).toString().padStart(2,'0')}`; }
 
 function showSetup() {
-    const overlay = document.createElement('div'); overlay.id = 'setup-overlay';
-    document.body.appendChild(overlay);
-    
+    const overlay = document.getElementById('setup-overlay');
     let activeTab = 'create';
+
     const renderOverlay = () => {
         overlay.innerHTML = `
         <div class="setup-card">
             <div class="tab-btns">
-                <button class="tab-btn ${activeTab==='create'?'active':''}" onclick="setTab('create')">CREATE</button>
-                <button class="tab-btn ${activeTab==='join'?'active':''}" onclick="setTab('join')">JOIN</button>
+                <button id="tabCreate" class="tab-btn ${activeTab==='create'?'active':''}">CREATE</button>
+                <button id="tabJoin" class="tab-btn ${activeTab==='join'?'active':''}">JOIN</button>
             </div>
             <div class="input-group"><label>Room Password</label><input id="roomPass"></div>
             <div class="input-group"><label>Your Name</label><input id="uName" value="Player"></div>
             
-            ${activeTab === 'create' ? `
+            <div id="tabContent"></div>
+        </div>`;
+
+        const content = document.getElementById('tabContent');
+        if (activeTab === 'create') {
+            content.innerHTML = `
                 <div class="input-group"><label>Time (Min / Sec / Inc)</label>
                     <div class="time-row">
                         <input type="number" id="tMin" value="10">
@@ -257,35 +267,40 @@ function showSetup() {
                 <div class="input-group"><label>Play As</label>
                     <select id="pColor"><option value="white">White</option><option value="black">Black</option><option value="random">Random</option></select>
                 </div>
-                <button class="start-btn" id="createBtn">CREATE ROOM</button>
-            ` : `
-                <button class="start-btn" id="joinBtn">JOIN ROOM</button>
-            `}
-        </div>`;
+                <button class="start-btn" id="actionBtn">CREATE ROOM</button>`;
+        } else {
+            content.innerHTML = `<button class="start-btn" id="actionBtn">JOIN ROOM</button>`;
+        }
 
-        if(activeTab === 'create') {
-            document.getElementById('createBtn').onclick = () => {
-                currentPassword = document.getElementById('roomPass').value;
-                if(!currentPassword) return;
+        // Re-attach listeners every time the HTML is written
+        document.getElementById('tabCreate').onclick = () => { activeTab = 'create'; renderOverlay(); };
+        document.getElementById('tabJoin').onclick = () => { activeTab = 'join'; renderOverlay(); };
+
+        document.getElementById('actionBtn').onclick = () => {
+            currentPassword = document.getElementById('roomPass').value;
+            const uName = document.getElementById('uName').value;
+            localStorage.setItem('lastUName', uName); // Save for the confirmation step
+
+            if (!currentPassword) {
+                alert("Please enter a password.");
+                return;
+            }
+
+            if (activeTab === 'create') {
                 socket.emit("create-room", {
                     password: currentPassword,
-                    name: document.getElementById('uName').value,
+                    name: uName,
                     mins: document.getElementById('tMin').value,
                     secs: document.getElementById('tSec').value,
                     inc: document.getElementById('tInc').value,
                     preferredColor: document.getElementById('pColor').value
                 });
-            };
-        } else {
-            document.getElementById('joinBtn').onclick = () => {
-                currentPassword = document.getElementById('roomPass').value;
-                if(!currentPassword) return;
-                socket.emit("join-attempt", { password: currentPassword, name: document.getElementById('uName').value });
-            };
-        }
+            } else {
+                socket.emit("join-attempt", { password: currentPassword, name: uName });
+            }
+        };
     };
 
-    window.setTab = (t) => { activeTab = t; renderOverlay(); };
     renderOverlay();
 }
 window.onload = showSetup;
