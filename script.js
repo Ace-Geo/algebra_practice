@@ -1,7 +1,10 @@
-const socket = io("https://algebra-but-better.onrender.com");
+// REPLACE THIS with your actual Render URL
+const socket = io("https://your-chess-game.onrender.com");
+
 const boardElement = document.getElementById('main-layout');
 const statusElement = document.getElementById('status');
 
+// Initial Board State
 let gameBoard = [
     ['♜','♞','♝','♛','♚','♝','♞','♜'],
     ['♟','♟','♟','♟','♟','♟','♟','♟'],
@@ -17,12 +20,29 @@ let selected = null;
 let currentTurn = 'white';
 
 function draw() {
-    boardElement.innerHTML = '';
+    // This clears the 'thin black box' and refills it
+    boardElement.innerHTML = ''; 
+    
     for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
             const sq = document.createElement('div');
-            sq.className = `square ${(r + c) % 2 === 0 ? 'white-sq' : 'black-sq'}`;
-            if (selected && selected.r === r && selected.c === c) sq.classList.add('selected');
+            
+            // Setting the size manually here ensures the box isn't thin
+            sq.style.width = "60px";
+            sq.style.height = "60px";
+            sq.style.display = "flex";
+            sq.style.justifyContent = "center";
+            sq.style.alignItems = "center";
+            sq.style.fontSize = "40px";
+            sq.style.cursor = "pointer";
+
+            // Alternating colors
+            sq.style.backgroundColor = (r + c) % 2 === 0 ? '#eeeed2' : '#769656';
+            
+            if (selected && selected.r === r && selected.c === c) {
+                sq.style.backgroundColor = "#f7f769"; // Yellow if selected
+            }
+
             sq.innerText = gameBoard[r][c];
             sq.onclick = () => handleClick(r, c);
             boardElement.appendChild(sq);
@@ -32,13 +52,24 @@ function draw() {
 }
 
 function handleClick(r, c) {
+    const piece = gameBoard[r][c];
+    
     if (selected) {
-        const move = { from: selected, to: { r, c }, piece: gameBoard[selected.r][selected.c] };
+        // Move piece
+        const move = { 
+            from: selected, 
+            to: { r, c }, 
+            piece: gameBoard[selected.r][selected.c] 
+        };
+        
         executeMove(move);
         socket.emit("send-move", { roomId: "global", move });
         selected = null;
     } else {
-        if (gameBoard[r][c] !== '') selected = { r, c };
+        // Select piece (only if it's not an empty square)
+        if (piece !== '') {
+            selected = { r, c };
+        }
     }
     draw();
 }
@@ -50,6 +81,9 @@ function executeMove(move) {
     draw();
 }
 
+// Socket listeners
 socket.on("receive-move", (move) => executeMove(move));
 socket.emit("join-room", "global");
+
+// This line actually starts the drawing process!
 draw();
