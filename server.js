@@ -31,6 +31,19 @@ io.on("connection", (socket) => {
         socket.to(data.password).emit("receive-move", data);
     });
 
+    // NEW: Resignation and Draw Logic
+    socket.on("resign", (data) => {
+        socket.to(data.password).emit("opponent-resigned", { winner: data.winner });
+    });
+
+    socket.on("offer-draw", (data) => {
+        socket.to(data.password).emit("draw-offered");
+    });
+
+    socket.on("draw-response", (data) => {
+        socket.to(data.password).emit("draw-resolved", { accepted: data.accepted });
+    });
+
     socket.on("disconnecting", () => {
         socket.rooms.forEach(room => {
             const clients = io.sockets.adapter.rooms.get(room);
