@@ -12,18 +12,16 @@ io.on("connection", (socket) => {
 
         if (numClients < 2) {
             socket.join(password);
-            // If 0 people were there, you are player 1 (White). 
-            // If 1 person was there, you are player 2 (Black).
+            // First person is white, second person is black
             const assignedColor = (numClients === 0) ? "white" : "black";
             socket.emit("player-assignment", assignedColor);
-            console.log(`User joined room ${password} as ${assignedColor}`);
         } else {
-            socket.emit("error-msg", "Room is full!");
+            socket.emit("error-msg", "This room is full! Try a different password.");
         }
     });
 
     socket.on("send-move", (data) => {
-        // Sends move to the other person in the same password room
+        // Send move only to the person in the same password room
         socket.to(data.password).emit("receive-move", data.move);
     });
 });
