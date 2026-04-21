@@ -73,7 +73,6 @@ body {
 .black-sq { background: #779556; }
 .selected { background: #f6f669 !important; }
 
-/* King in Check Highlight */
 .check-highlight { 
     background: radial-gradient(circle, #ff5e5e 0%, #ca3434 100%) !important; 
 }
@@ -132,6 +131,13 @@ body {
     background: #3c3a37; border: none; color: #bababa; 
     padding: 8px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; 
 }
+
+.action-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.hidden { display: none !important; }
 
 .draw-modal { 
     background: #4b4845; border-left: 4px solid #779556; 
