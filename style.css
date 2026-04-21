@@ -19,8 +19,14 @@ body { background: #312e2b; display: flex; align-items: center; justify-content:
 .w-piece { color: #fff; text-shadow: 1px 1px 2px #000; }
 .b-piece { color: #000; }
 
-.player-bar { display: flex; justify-content: space-between; align-items: center; background: #262421; padding: 8px 12px; border-radius: 4px; }
-.timer { font-family: monospace; font-size: 18px; background: #312e2b; padding: 4px 8px; border-radius: 3px; border: 1px solid #444; }
+.player-bar { display: flex; justify-content: space-between; align-items: center; background: #262421; padding: 8px 12px; border-radius: 4px; min-width: 480px; box-sizing: border-box;}
+.timer { font-family: monospace; font-size: 18px; background: #312e2b; padding: 4px 8px; border-radius: 3px; border: 1px solid #444; min-width: 60px; text-align: center;}
 .timer.active { background: #fff; color: #000; font-weight: bold; }
-#side-panel { width: 200px; background: #262421; padding: 15px; border-radius: 4px; }
-#status-text { text-align: center; font-weight: bold; color: #779556; }
+
+#side-panel { width: 220px; background: #262421; padding: 15px; border-radius: 4px; display: flex; flex-direction: column; gap: 15px; height: 500px; box-sizing: border-box;}
+#status-box { background: #312e2b; padding: 10px; border-radius: 4px; text-align: center; border: 1px solid #444; }
+#status-text { font-weight: bold; color: #779556; text-transform: uppercase; font-size: 14px; }
+#history-container { flex-grow: 1; overflow-y: auto; background: #1a1a1a; border-radius: 4px; padding: 5px; border: 1px solid #333; }
+.history-row { display: grid; grid-template-columns: 35px 1fr 1fr; font-family: 'Courier New', Courier, monospace; font-size: 14px; padding: 5px 0; border-bottom: 1px solid #262421; }
+.move-num { color: #666; text-align: center; }
+.move-val { color: #bababa; padding-left: 10px; }
