@@ -30,13 +30,13 @@ socket.on("receive-move", (data) => {
 });
 
 socket.on("opponent-resigned", (data) => {
-    if (isGameOver) return; // Prevent outcome change
+    if (isGameOver) return;
     isGameOver = true;
     render(`${data.winner.toUpperCase()} WINS BY RESIGNATION`);
 });
 
 socket.on("draw-offered", () => {
-    if (isGameOver) return; // Ignore draw offers if game is over
+    if (isGameOver) return;
     const area = document.getElementById('notification-area');
     if (area) {
         area.innerHTML = `<div class="draw-modal">Opponent offers draw<div class="modal-btns">
@@ -47,10 +47,7 @@ socket.on("draw-offered", () => {
 });
 
 socket.on("draw-resolved", (data) => {
-    if (data.accepted && !isGameOver) { 
-        isGameOver = true; 
-        render("DRAW BY AGREEMENT"); 
-    }
+    if (data.accepted && !isGameOver) { isGameOver = true; render("DRAW BY AGREEMENT"); }
 });
 
 // --- 2. CHESS LOGIC ---
@@ -152,14 +149,14 @@ function handleActualMove(from, to, isLocal) {
 }
 
 function resignGame() {
-    if (isGameOver) return; // BLOCKED IF GAME ENDED
+    if (isGameOver) return;
     const win = myColor === 'white' ? 'black' : 'white';
     socket.emit("resign", { password: currentPassword, winner: win });
     isGameOver = true; render(`${win.toUpperCase()} WINS BY RESIGNATION`);
 }
 
 function offerDraw() { 
-    if (isGameOver) return; // BLOCKED IF GAME ENDED
+    if (isGameOver) return;
     socket.emit("offer-draw", { password: currentPassword }); 
 }
 
@@ -211,10 +208,36 @@ function render(forcedStatus) {
                 const sp = document.createElement('span'); sp.className = `piece ${isWhite(piece)?'w-piece':'b-piece'}`;
                 sp.textContent = piece; sq.appendChild(sp);
             }
+
+            // --- IMPROVED SELECTION LOGIC ---
             sq.onclick = () => {
                 if(isGameOver || currentTurn !== myColor) return;
-                if(selected && moveIsLegal(selected.r, selected.c, r, c, boardState[selected.r][selected.c], currentTurn)) handleActualMove(selected, {r,c}, true);
-                else if(getTeam(piece) === currentTurn) { selected = {r,c}; render(); }
+
+                if (selected) {
+                    // 1. If clicking the SAME square, deselect
+                    if (selected.r === r && selected.c === c) {
+                        selected = null;
+                    } 
+                    // 2. If clicking another piece of YOUR team, switch selection
+                    else if (getTeam(piece) === currentTurn) {
+                        selected = {r, c};
+                    } 
+                    // 3. If clicking a valid move square, execute move
+                    else if (moveIsLegal(selected.r, selected.c, r, c, boardState[selected.r][selected.c], currentTurn)) {
+                        handleActualMove(selected, {r,c}, true);
+                        return; // HandleActualMove calls render()
+                    } 
+                    // 4. If clicking an invalid square, deselect
+                    else {
+                        selected = null;
+                    }
+                } else {
+                    // No selection yet: select if it's your piece
+                    if (getTeam(piece) === currentTurn) {
+                        selected = {r, c};
+                    }
+                }
+                render();
             };
             boardEl.appendChild(sq);
         }
@@ -225,8 +248,6 @@ function render(forcedStatus) {
     layout.appendChild(gameArea);
 
     const side = document.createElement('div'); side.id = 'side-panel';
-    
-    // Check if we should disable buttons
     const btnState = isGameOver ? "disabled" : "";
 
     side.innerHTML = `<div id="status-box"><div id="status-text">${sTxt}</div></div><div id="notification-area"></div>
