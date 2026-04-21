@@ -1,0 +1,36 @@
+body {
+    background-color: #312e2b;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+#status { margin-bottom: 10px; }
+
+#main-layout {
+    display: grid;
+    grid-template-columns: repeat(8, 60px);
+    grid-template-rows: repeat(8, 60px);
+    border: 2px solid #111;
+}
+
+.square {
+    width: 60px;
+    height: 60px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 40px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.white-sq { background-color: #eeeed2; color: #000; }
+.black-sq { background-color: #769656; color: #000; }
+
+.selected { background-color: #f7f769 !important; }
