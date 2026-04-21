@@ -24,10 +24,18 @@ body { background: #312e2b; display: flex; align-items: center; justify-content:
 .timer { font-family: monospace; font-size: 18px; background: #312e2b; padding: 4px 8px; border-radius: 3px; border: 1px solid #444; min-width: 65px; text-align: center;}
 .timer.active { background: #fff; color: #000; font-weight: bold; }
 
-#side-panel { width: 220px; background: #262421; padding: 15px; border-radius: 4px; display: flex; flex-direction: column; gap: 15px; height: 500px; box-sizing: border-box;}
+#side-panel { width: 220px; background: #262421; padding: 15px; border-radius: 4px; display: flex; flex-direction: column; gap: 10px; height: 500px; box-sizing: border-box;}
 #status-box { background: #312e2b; padding: 10px; border-radius: 4px; text-align: center; border: 1px solid #444; }
 #status-text { font-weight: bold; color: #779556; text-transform: uppercase; font-size: 14px; }
 #history-container { flex-grow: 1; overflow-y: auto; background: #1a1a1a; border-radius: 4px; padding: 5px; border: 1px solid #333; }
 .history-row { display: grid; grid-template-columns: 35px 1fr 1fr; font-family: 'Courier New', Courier, monospace; font-size: 14px; padding: 5px 0; border-bottom: 1px solid #262421; }
 .move-num { color: #666; text-align: center; }
 .move-val { color: #bababa; padding-left: 10px; }
+
+/* NEW BUTTONS */
+.action-btn { background: #3c3a37; border: none; color: #bababa; padding: 8px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; transition: 0.2s; }
+.action-btn:hover { background: #454340; color: #fff; }
+.btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+#draw-modal { background: #779556; color: #fff; padding: 8px; border-radius: 4px; text-align: center; font-size: 12px; }
+.modal-btns { display: flex; gap: 5px; justify-content: center; margin-top: 5px; }
+.modal-btns button { padding: 3px 8px; border: none; border-radius: 2px; cursor: pointer; font-weight: bold; }
