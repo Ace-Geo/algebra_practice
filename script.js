@@ -1,5 +1,5 @@
 // 1. Connection
-const socket = io("https://your-render-url.onrender.com");
+const socket = io("https://algebra-but-better.onrender.com");
 const roomId = "chess-global-room";
 socket.emit("join-room", roomId);
 
