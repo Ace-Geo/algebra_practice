@@ -35,7 +35,7 @@ body {
 .tabs button.active { background: #454241; color: #fff; border-radius: 4px; }
 
 .input-group { text-align: left; margin-bottom: 15px; }
-.input-group label { display: block; font-size: 12px; color: #bababa; margin-bottom: 5px; text-transform: uppercase; }
+.input-group label { display: block; font-size: 12px; color: #bababa; margin-bottom: 5px;f text-transform: uppercase; }
 .input-group input, .input-group select {
     width: 100%; padding: 10px; background: #262421; border: 1px solid #403d39;
     color: #fff; border-radius: 4px; box-sizing: border-box;
