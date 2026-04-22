@@ -1,34 +1,15 @@
-// --- AUTO-INJECTOR & CONNECTION CHECK ---
-function ensureDOM() {
-    if (!document.getElementById('setup-overlay')) {
-        const ov = document.createElement('div'); ov.id = 'setup-overlay';
-        document.body.appendChild(ov);
-    }
-    if (!document.getElementById('main-layout')) {
-        const ml = document.createElement('div'); ml.id = 'main-layout';
-        document.body.appendChild(ml);
-    }
-}
-
-// Replace with your actual Render/Server URL
+// --- INITIALIZATION ---
 const socket = io("https://algebra-but-better.onrender.com");
-
-socket.on("connect", () => console.log("Connected to server."));
-socket.on("connect_error", (err) => {
-    console.error("Connection failed:", err.message);
-    alert("Cannot connect to game server. Is it running?");
-});
-
 let myColor, currentPassword, increment;
 let whiteName, blackName, whiteTime, blackTime;
 let boardState, currentTurn, selected, isGameOver, isInfinite;
 let hasMoved = {}, enPassantTarget = null, moveHistory = [];
 
-// --- CHESS LOGIC ---
 const isWhite = (c) => ['♖','♙','♘','♗','♕','♔'].includes(c);
 const getTeam = (c) => c === '' ? null : (isWhite(c) ? 'white' : 'black');
 const getNotation = (p) => ({'♖':'R','♘':'N','♗':'B','♕':'Q','♔':'K','♜':'R','♞':'N','♝':'B','♛':'Q','♚':'K'}[p] || '');
 
+// --- VALIDATION & CHECK ENGINE ---
 function validateMoveMechanics(fR, fC, tR, tC, p, tar, b) {
     const dr = tR-fR, dc = tC-fC, adr = Math.abs(dr), adc = Math.abs(dc), team = getTeam(p);
     if (tar !== '' && getTeam(tar) === team) return false;
@@ -62,15 +43,31 @@ function moveIsLegal(fR, fC, tR, tC, p, team) {
     if (!validateMoveMechanics(fR, fC, tR, tC, p, boardState[tR][tC], boardState)) return false;
     const temp = boardState.map(r => [...r]);
     temp[tR][tC] = p; temp[fR][fC] = '';
-    const k = team === 'white' ? '♔' : '♚';
-    let kr, kc;
-    for(let r=0; r<8; r++) for(let c=0; c<8; c++) if(temp[r][c]===k){kr=r;kc=c;}
-    const atk = team==='white'?'black':'white';
-    for(let i=0; i<8; i++) for(let j=0; j<8; j++) 
-        if(temp[i][j]!=='' && getTeam(temp[i][j])===atk && validateMoveMechanics(i,j,kr,kc,temp[i][j],temp[kr][kc],temp)) return false;
-    return true;
+    return !isInCheck(team, temp);
 }
 
+function isInCheck(team, board) {
+    const kChar = team === 'white' ? '♔' : '♚';
+    let kr, kc;
+    for(let r=0; r<8; r++) for(let c=0; c<8; c++) if(board[r][c]===kChar){kr=r;kc=c;}
+    const opp = team==='white'?'black':'white';
+    for(let r=0; r<8; r++) for(let c=0; c<8; c++) 
+        if(board[r][c]!=='' && getTeam(board[r][c])===opp && validateMoveMechanics(r,c,kr,kc,board[r][c],board[kr][kc],board)) return true;
+    return false;
+}
+
+function hasLegalMoves(team) {
+    for(let r=0; r<8; r++) for(let c=0; c<8; c++) {
+        const p = boardState[r][c];
+        if(p !== '' && getTeam(p) === team) {
+            for(let tr=0; tr<8; tr++) for(let tc=0; tc<8; tc++) 
+                if(moveIsLegal(r,c,tr,tc,p,team)) return true;
+        }
+    }
+    return false;
+}
+
+// --- CORE ACTIONS ---
 function handleActualMove(from, to, isLocal) {
     const p = boardState[from.r][from.c];
     const files = ['a','b','c','d','e','f','g','h'], rows = ['8','7','6','5','4','3','2','1'];
@@ -82,9 +79,6 @@ function handleActualMove(from, to, isLocal) {
     }
 
     let moveNote = (getNotation(p) || (boardState[to.r][to.c]!==''?files[from.c]:'')) + (boardState[to.r][to.c]!==''?'x':'') + files[to.c] + rows[to.r];
-    if (currentTurn === 'white') moveHistory.push({ w: moveNote, b: '' });
-    else moveHistory[moveHistory.length-1].b = moveNote;
-
     boardState[to.r][to.c] = p; boardState[from.r][from.c] = '';
     hasMoved[`${from.r},${from.c}`] = true;
     enPassantTarget = (p==='♙'||p==='♟' && Math.abs(from.r-to.r)===2) ? {r:(from.r+to.r)/2, c:to.c} : null;
@@ -93,37 +87,22 @@ function handleActualMove(from, to, isLocal) {
         if(currentTurn==='white') whiteTime+=increment; else blackTime+=increment;
         socket.emit("send-move", { password: currentPassword, move: {from, to}, whiteTime, blackTime });
     }
+
     currentTurn = currentTurn === 'white' ? 'black' : 'white';
-    selected = null; render();
+    
+    let status = null;
+    if (isInCheck(currentTurn, boardState)) {
+        if (!hasLegalMoves(currentTurn)) { isGameOver = true; status = `CHECKMATE - ${currentTurn==='white'?'BLACK':'WHITE'} WINS`; moveNote += "#"; }
+        else moveNote += "+";
+    } else if (!hasLegalMoves(currentTurn)) { isGameOver = true; status = "STALEMATE (DRAW)"; }
+
+    if (currentTurn === 'black') moveHistory.push({ w: moveNote, b: '' });
+    else moveHistory[moveHistory.length-1].b = moveNote;
+
+    selected = null; render(status);
 }
 
-function offerDraw() { socket.emit("offer-draw", { password: currentPassword }); }
-function resign() { socket.emit("resign", { password: currentPassword, winner: myColor==='white'?'black':'white' }); }
-
-// --- SOCKET RESPONSES ---
-socket.on("waiting-for-opponent", () => {
-    document.getElementById('setup-overlay').innerHTML = `
-        <div class="setup-card">
-            <h2>Lobby Created</h2>
-            <p>Password: <b>${currentPassword}</b></p>
-            <p>Waiting for an opponent to join...</p>
-            <button class="action-btn" onclick="location.reload()">Cancel</button>
-        </div>`;
-});
-
-socket.on("confirm-settings", (data) => {
-    document.getElementById('setup-overlay').innerHTML = `
-        <div class="setup-card">
-            <h2>Join Game?</h2>
-            <p>Host: ${data.creatorName}</p>
-            <button class="start-btn" id="confirmJoin">JOIN</button>
-        </div>`;
-    document.getElementById('confirmJoin').onclick = () => {
-        const n = document.getElementById('uName')?.value || "Player 2";
-        socket.emit("join-confirmed", { password: currentPassword, name: n });
-    };
-});
-
+// --- SOCKETS ---
 socket.on("game-start", (data) => {
     whiteName = data.whiteName; blackName = data.blackName;
     whiteTime = (data.settings.mins * 60) + data.settings.secs;
@@ -132,18 +111,13 @@ socket.on("game-start", (data) => {
     document.getElementById('main-layout').style.visibility = 'visible';
     initGameState();
 });
-
 socket.on("assign-color", (c) => { myColor = c; render(); });
 socket.on("receive-move", (d) => { whiteTime = d.whiteTime; blackTime = d.blackTime; handleActualMove(d.move.from, d.move.to, false); });
-socket.on("opponent-resigned", (d) => { isGameOver = true; render(`${d.winner.toUpperCase()} WINS (RESIGNATION)`); });
-socket.on("draw-offered", () => { if(confirm("Accept draw?")) socket.emit("draw-response", {password: currentPassword, accepted: true}); });
-socket.on("draw-result", (acc) => { if(acc) { isGameOver = true; render("DRAW AGREED"); } });
-socket.on("error-msg", (m) => alert(m));
 
-// --- UI ---
+// --- UI RENDER ---
 function render(statusOverride) {
     const layout = document.getElementById('main-layout');
-    if (!layout) return; layout.replaceChildren();
+    layout.replaceChildren();
 
     const gameArea = document.createElement('div');
     const createBar = (name, id) => {
@@ -162,12 +136,15 @@ function render(statusOverride) {
             const piece = boardState[r][c];
             sq.className = `square ${(r+c)%2===0 ? 'white-sq' : 'black-sq'}`;
             if (selected?.r===r && selected?.c===c) sq.classList.add('selected');
+            if ((piece==='♔'||piece==='♚') && getTeam(piece)===currentTurn && isInCheck(currentTurn, boardState)) sq.classList.add('in-check');
+
             if (selected && moveIsLegal(selected.r, selected.c, r, c, boardState[selected.r][selected.c], currentTurn)) {
-                const h = document.createElement('div'); h.className = piece === '' ? 'hint-dot' : 'hint-capture';
-                sq.appendChild(h);
+                const hint = document.createElement('div'); 
+                hint.className = piece === '' ? 'hint-dot' : 'hint-capture';
+                sq.appendChild(hint);
             }
             if(piece) {
-                const sp = document.createElement('span'); sp.className = `piece ${isWhite(piece)?'w-piece':'b-piece'}`;
+                const sp = document.createElement('span'); sp.className = `piece ${isWhite(piece)?'w-piece':'black-piece'}`;
                 sp.textContent = piece; sq.appendChild(sp);
             }
             sq.onclick = () => {
@@ -185,7 +162,7 @@ function render(statusOverride) {
     const side = document.createElement('div'); side.id = 'side-panel';
     side.innerHTML = `<div id="status-box">${statusOverride || currentTurn.toUpperCase() + "'S TURN"}</div>
         <div id="history-container"></div>
-        <div class="btn-group"><button class="action-btn" onclick="offerDraw()">DRAW</button><button class="action-btn" onclick="resign()">RESIGN</button></div>`;
+        <div class="btn-group"><button class="action-btn" onclick="socket.emit('offer-draw', {password: currentPassword})">DRAW</button><button class="action-btn" onclick="socket.emit('resign', {password: currentPassword})">RESIGN</button></div>`;
     const hist = side.querySelector('#history-container');
     moveHistory.forEach((m, i) => { hist.innerHTML += `<div class="history-row"><span>${i+1}.</span><span>${m.w}</span><span>${m.b}</span></div>`; });
     layout.appendChild(side);
@@ -210,21 +187,15 @@ function updateTimerDisplay() {
 }
 
 function showSetup() {
-    ensureDOM();
     const overlay = document.getElementById('setup-overlay');
     let tab = 'create';
     const draw = () => {
         overlay.innerHTML = `
         <div class="setup-card">
             <div class="tab-btns"><button class="tab-btn ${tab==='create'?'active':''}" id="tC">CREATE</button><button class="tab-btn ${tab==='join'?'active':''}" id="tJ">JOIN</button></div>
-            <div class="input-group"><label>Room Password</label><input id="roomPass"></div>
+            <div class="input-group"><label>Room Password</label><input id="roomPass" type="password"></div>
             <div class="input-group"><label>Your Name</label><input id="uName" value="Player"></div>
-            ${tab==='create' ? `
-                <div class="input-group"><label>Time Control (Min|Sec|Inc)</label>
-                    <div class="time-row"><input type="number" id="tM" value="10"><input type="number" id="tS" value="0"><input type="number" id="tI" value="0"></div>
-                </div>
-                <div class="input-group"><label>Play As</label><select id="pC"><option value="white">White</option><option value="black">Black</option><option value="random">Random</option></select></div>
-            `:''}
+            ${tab==='create' ? `<div class="input-group"><label>Time (Min|Sec|Inc)</label><div class="time-row"><input type="number" id="tM" value="10"><input type="number" id="tS" value="0"><input type="number" id="tI" value="0"></div></div><div class="input-group"><label>Play As</label><select id="pC"><option value="white">White</option><option value="black">Black</option><option value="random">Random</option></select></div>` : ''}
             <button class="start-btn" id="goBtn">${tab.toUpperCase()}</button>
         </div>`;
         document.getElementById('tC').onclick = () => { tab='create'; draw(); };
@@ -232,7 +203,6 @@ function showSetup() {
         document.getElementById('goBtn').onclick = () => {
             currentPassword = document.getElementById('roomPass').value;
             const name = document.getElementById('uName').value;
-            if (!currentPassword) return alert("Enter a password!");
             if (tab==='create') socket.emit("create-room", { password: currentPassword, name, mins: document.getElementById('tM').value, secs: document.getElementById('tS').value, inc: document.getElementById('tI').value, preferredColor: document.getElementById('pC').value });
             else socket.emit("join-attempt", { password: currentPassword, name });
         };
