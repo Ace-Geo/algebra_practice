@@ -1,7 +1,8 @@
 # Algebra Practice
 Play here: ace-geo.github.io/algebra_practice/
 How to play:
-  Enter a Room Password (this acts as a unique lobby code).
-  Enter your Username.
-  If you are the first player, you will be assigned White. Set the timer duration.
-  Share the password with a friend. Once they join, the game begins automatically!
+  Create a Room: Enter a password, your username, and choose your time control (minutes, seconds, and increment).
+  Join a Room: Share the room password with a friend. They enter the password and confirm the settings to start the match.
+  Gameplay:
+  Click a piece to see legal moves for that piece.
+  Use the sidebar to offer draws or resign.
