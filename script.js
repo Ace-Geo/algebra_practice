@@ -307,7 +307,6 @@ function resignGame() {
     const winner = myColor === 'white' ? 'black' : 'white';
     const status = `${winner.toUpperCase()} WINS BY RESIGNATION`;
     
-    // Update local state immediately
     isGameOver = true;
     if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
     
@@ -330,16 +329,10 @@ function showDrawOffer() {
 }
 
 function respondToDraw(accepted) {
+    // Instead of locking locally, we tell the server. 
+    // The server then broadcasts "draw-resolved" to EVERYONE including us.
     socket.emit("draw-response", { password: currentPassword, accepted: accepted });
     document.getElementById('notification-area').innerHTML = '';
-    
-    if (accepted) { 
-        const status = "GAME DRAWN BY AGREEMENT";
-        isGameOver = true; 
-        if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance); 
-        showResultModal(status);
-        render(status); 
-    }
 }
 
 function showStatusMessage(msg) {
@@ -400,8 +393,6 @@ function render(forcedStatus) {
     layout.replaceChildren();
 
     const check = isTeamInCheck(currentTurn, boardState);
-    
-    // Fix: Prioritize forcedStatus if game is over to ensure status bar updates correctly
     let sTxt = forcedStatus || (isGameOver ? "GAME OVER" : `${currentTurn.toUpperCase()}'S TURN ${check ? '(CHECK!)' : ''}`);
 
     const gameArea = document.createElement('div'); gameArea.id = 'game-area';
