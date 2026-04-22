@@ -45,20 +45,22 @@ socket.on("receive-move", (data) => {
 });
 
 socket.on("opponent-resigned", (data) => {
+    const status = `${data.winner.toUpperCase()} WINS BY RESIGNATION`;
     isGameOver = true;
     if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
-    showResultModal(`${data.winner.toUpperCase()} WINS BY RESIGNATION`);
-    render(`${data.winner.toUpperCase()} WINS BY RESIGNATION`);
+    showResultModal(status);
+    render(status);
 });
 
 socket.on("draw-offered", () => showDrawOffer());
 
 socket.on("draw-resolved", (data) => {
     if (data.accepted) {
+        const status = "GAME DRAWN BY AGREEMENT";
         isGameOver = true;
         if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
-        showResultModal("GAME DRAWN BY AGREEMENT");
-        render("GAME DRAWN BY AGREEMENT");
+        showResultModal(status);
+        render(status);
     } else {
         showStatusMessage("Draw offer declined");
     }
@@ -303,7 +305,16 @@ function handleActualMove(from, to, isLocal) {
 function resignGame() {
     if (isGameOver) return;
     const winner = myColor === 'white' ? 'black' : 'white';
+    const status = `${winner.toUpperCase()} WINS BY RESIGNATION`;
+    
+    // Update local state immediately
+    isGameOver = true;
+    if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
+    
     socket.emit("resign", { password: currentPassword, winner: winner });
+    
+    showResultModal(status);
+    render(status);
 }
 
 function offerDraw() {
@@ -321,11 +332,13 @@ function showDrawOffer() {
 function respondToDraw(accepted) {
     socket.emit("draw-response", { password: currentPassword, accepted: accepted });
     document.getElementById('notification-area').innerHTML = '';
+    
     if (accepted) { 
+        const status = "GAME DRAWN BY AGREEMENT";
         isGameOver = true; 
         if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance); 
-        showResultModal("GAME DRAWN BY AGREEMENT");
-        render("GAME DRAWN BY AGREEMENT"); 
+        showResultModal(status);
+        render(status); 
     }
 }
 
@@ -358,13 +371,17 @@ function requestRematch() {
     if (rematchRequested) return;
     rematchRequested = true;
     const btn = document.getElementById('rematch-btn');
-    btn.innerText = "Waiting...";
-    btn.disabled = true;
+    if (btn) {
+        btn.innerText = "Waiting...";
+        btn.disabled = true;
+    }
     socket.emit("rematch-request", { password: currentPassword });
 }
 
 function closeModal() {
-    document.getElementById('game-over-overlay').style.display = 'none';
+    const overlay = document.getElementById('game-over-overlay');
+    if (overlay) overlay.style.display = 'none';
+    
     if (!document.getElementById('reopen-results-btn')) {
         const btn = document.createElement('button');
         btn.id = 'reopen-results-btn';
@@ -383,6 +400,8 @@ function render(forcedStatus) {
     layout.replaceChildren();
 
     const check = isTeamInCheck(currentTurn, boardState);
+    
+    // Fix: Prioritize forcedStatus if game is over to ensure status bar updates correctly
     let sTxt = forcedStatus || (isGameOver ? "GAME OVER" : `${currentTurn.toUpperCase()}'S TURN ${check ? '(CHECK!)' : ''}`);
 
     const gameArea = document.createElement('div'); gameArea.id = 'game-area';
@@ -458,7 +477,7 @@ function render(forcedStatus) {
 
 function initGameState() {
     boardState = [['♜','♞','♝','♛','♚','♝','♞','♜'],['♟','♟','♟','♟','♟','♟','♟','♟'],['','','','','','','',''],['','','','','','','',''],['','','','','','','',''],['','','','','','','',''],['♙','♙','♙','♙','♙','♙','♙','♙'],['♖','♘','♗','♕','♔','♗','♘','♖']];
-    currentTurn = 'white'; hasMoved = {}; moveHistory = []; isGameOver = false; selected = null;
+    currentTurn = 'white'; hasMoved = {}; moveHistory = []; isGameOver = false; selected = null; rematchRequested = false;
     if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
     if (!isInfinite) {
         window.chessIntervalInstance = setInterval(() => {
