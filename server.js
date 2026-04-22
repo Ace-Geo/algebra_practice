@@ -3,53 +3,37 @@ const app = express();
 const http = require('http').createServer(app);
 const io = require("socket.io")(http, { cors: { origin: "*" } });
 
-const roomSettings = {}; 
+const rooms = {}; 
 
 io.on("connection", (socket) => {
     socket.on("create-room", (data) => {
-        const { password, name, mins, secs, inc, preferredColor } = data;
-        socket.join(password);
-        
-        let creatorColor = preferredColor === 'random' ? (Math.random() > 0.5 ? 'white' : 'black') : preferredColor;
-        
-        roomSettings[password] = {
-            mins: parseInt(mins) || 10,
-            secs: parseInt(secs) || 0,
-            inc: parseInt(inc) || 0,
-            whiteName: creatorColor === 'white' ? name : null,
-            blackName: creatorColor === 'black' ? name : null,
-            creatorColor: creatorColor,
-            creatorId: socket.id
+        socket.join(data.password);
+        rooms[data.password] = {
+            creatorId: socket.id,
+            creatorName: data.name,
+            whiteName: data.name, // Default creator to white for simplicity
+            blackName: null
         };
-        socket.emit("waiting-for-opponent");
+        console.log(`Room created: ${data.password}`);
     });
 
     socket.on("join-attempt", (data) => {
-        const settings = roomSettings[data.password];
-        if (!settings) return socket.emit("error-msg", "Room not found!");
-        socket.emit("confirm-settings", { settings, creatorName: settings.whiteName || settings.blackName });
-    });
-
-    socket.on("join-confirmed", (data) => {
-        const settings = roomSettings[data.password];
-        if (!settings) return;
-        
-        socket.join(data.password);
-        const joinerColor = settings.creatorColor === 'white' ? 'black' : 'white';
-        
-        if (joinerColor === 'white') settings.whiteName = data.name;
-        else settings.blackName = data.name;
-
-        // Start game for everyone in the room
-        io.to(data.password).emit("game-start", { 
-            settings, 
-            whiteName: settings.whiteName, 
-            blackName: settings.blackName 
-        });
-        
-        // Assign colors specifically
-        socket.emit("assign-color", joinerColor);
-        io.to(settings.creatorId).emit("assign-color", settings.creatorColor);
+        const room = rooms[data.password];
+        if (room) {
+            socket.join(data.password);
+            room.blackName = data.name;
+            
+            // Tell the creator they are White
+            io.to(room.creatorId).emit("assign-color", "white");
+            // Tell the joiner they are Black
+            socket.emit("assign-color", "black");
+            
+            // Start game for both
+            io.to(data.password).emit("game-start", {
+                whiteName: room.whiteName,
+                blackName: room.blackName
+            });
+        }
     });
 
     socket.on("send-move", (data) => {
@@ -57,5 +41,4 @@ io.on("connection", (socket) => {
     });
 });
 
-const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+http.listen(process.env.PORT || 3000, () => console.log("Server Active"));
