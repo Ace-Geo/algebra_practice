@@ -4,7 +4,7 @@ let whiteName = "White", blackName = "Black";
 let boardState, currentTurn, hasMoved, enPassantTarget, selected, isGameOver, isInfinite;
 let whiteTime, blackTime, increment, moveHistory;
 
-// --- 1. SOCKET LISTENERS ---
+// --- SOCKET LISTENERS ---
 socket.on("player-assignment", (data) => {
     myColor = data.color;
     const s = data.settings;
@@ -39,7 +39,6 @@ socket.on("preview-settings", (data) => {
     const card = document.querySelector('.setup-card');
     const s = data.settings;
     
-    // Calculate what the joiner sees for their color
     let displayColor = "RANDOM";
     if (data.creatorColorPref === 'white') displayColor = "BLACK";
     if (data.creatorColorPref === 'black') displayColor = "WHITE";
@@ -65,7 +64,7 @@ socket.on("receive-move", (data) => {
 
 socket.on("error-msg", (msg) => alert(msg));
 
-// --- 2. LOBBY LOGIC ---
+// --- LOBBY LOGIC ---
 function showSetup() {
     const overlay = document.createElement('div');
     overlay.id = 'setup-overlay';
@@ -75,7 +74,6 @@ function showSetup() {
                 <button id="tab-create" class="active" onclick="switchTab('create')">Create Room</button>
                 <button id="tab-join" onclick="switchTab('join')">Join Room</button>
             </div>
-            
             <div id="create-sect">
                 <div class="input-group"><label>Room Password</label><input id="roomPass" placeholder="Secret Code"></div>
                 <div class="input-group"><label>Your Username</label><input id="uName" value="Player 1"></div>
@@ -97,7 +95,6 @@ function showSetup() {
                 </div>
                 <button class="start-btn" onclick="createRoom()">CREATE ROOM</button>
             </div>
-
             <div id="join-sect" style="display:none;">
                 <div class="input-group"><label>Room Password</label><input id="joinPass" placeholder="Enter password"></div>
                 <div class="input-group"><label>Your Username</label><input id="joinName" value="Player 2"></div>
@@ -132,26 +129,16 @@ function joinRoom() {
     currentPassword = document.getElementById('joinPass').value;
     tempName = document.getElementById('joinName').value;
     if(!currentPassword) return alert("Please enter room password");
-    socket.emit("join-attempt", { 
-        password: currentPassword, 
-        name: tempName 
-    });
+    socket.emit("join-attempt", { password: currentPassword });
 }
 
 function confirmJoin() {
-    socket.emit("confirm-join", { 
-        password: currentPassword, 
-        name: tempName
-    });
+    socket.emit("confirm-join", { password: currentPassword, name: tempName });
 }
 
-// --- 3. CHESS MECHANICS ---
+// --- CHESS MECHANICS ---
 const isWhite = (char) => ['♖', '♘', '♗', '♕', '♔', '♙'].includes(char);
 const getTeam = (char) => char === '' ? null : (isWhite(char) ? 'white' : 'black');
-const getPieceNotation = (p) => {
-    const map = {'♖':'R','♘':'N','♗':'B','♕':'Q','♔':'K','♜':'R','♞':'N','♝':'B','♛':'Q','♚':'K'};
-    return map[p] || '';
-};
 
 function validateMoveMechanics(fR, fC, tR, tC, p, tar, b) {
     const dr = tR-fR, dc = tC-fC, adr = Math.abs(dr), adc = Math.abs(dc), team = getTeam(p);
@@ -215,20 +202,15 @@ function hasLegalMoves(team) {
 
 function handleActualMove(from, to, isLocal) {
     const movingPiece = boardState[from.r][from.c];
-    const targetPiece = boardState[to.r][to.c];
     const isEP = (movingPiece==='♙'||movingPiece==='♟') && enPassantTarget?.r === to.r && enPassantTarget?.c === to.c;
     const movingTeam = currentTurn;
     const opponentTeam = movingTeam === 'white' ? 'black' : 'white';
     
-    let castle = null;
     if((movingPiece==='♔'||movingPiece==='♚') && Math.abs(from.c - to.c) === 2) {
-        castle = to.c === 6 ? 'short' : 'long';
         const rO = to.c === 6 ? 7 : 0, rN = to.c === 6 ? 5 : 3;
         boardState[to.r][rN] = boardState[to.r][rO]; boardState[to.r][rO] = '';
     }
 
-    let note = getNotation(from.r, from.c, to.r, to.c, movingPiece, targetPiece, isEP, castle);
-    
     if(isEP) boardState[from.r][to.c] = '';
     hasMoved[`${from.r},${from.c}`] = 1; 
     boardState[to.r][to.c] = movingPiece; boardState[from.r][from.c] = '';
@@ -249,32 +231,15 @@ function handleActualMove(from, to, isLocal) {
     if (!opponentHasMoves) {
         isGameOver = true;
         if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
-        if (opponentInCheck) {
-            note += '#';
-            forcedStatus = `CHECKMATE! ${movingTeam.toUpperCase()} WINS`;
-        } else {
-            forcedStatus = "DRAW BY STALEMATE";
-        }
-    } else if (opponentInCheck) {
-        note += '+';
+        if (opponentInCheck) forcedStatus = `CHECKMATE! ${movingTeam.toUpperCase()} WINS`;
+        else forcedStatus = "DRAW BY STALEMATE";
     }
-
-    if(movingTeam === 'white') moveHistory.push({w: note, b: ''}); 
-    else moveHistory[moveHistory.length-1].b = note;
 
     enPassantTarget = (movingPiece==='♙'||movingPiece==='♟') && Math.abs(from.r - to.r) === 2 ? {r:(from.r+to.r)/2, c: to.c} : null;
     selected = null;
     
     if (isLocal) socket.emit("send-move", { password: currentPassword, move: { from, to }, whiteTime, blackTime });
     render(forcedStatus);
-}
-
-function getNotation(fR, fC, tR, tC, piece, target, isEP, castle) {
-    if (castle) return castle === 'short' ? 'O-O' : 'O-O-O';
-    const files = ['a','b','c','d','e','f','g','h'], rows = ['8','7','6','5','4','3','2','1'];
-    let p = getPieceNotation(piece), cap = (target !== '' || isEP) ? 'x' : '';
-    if (p === '' && cap) p = files[fC]; 
-    return p + cap + files[tC] + rows[tR];
 }
 
 function render(forcedStatus) {
@@ -296,7 +261,7 @@ function render(forcedStatus) {
     if(myColor === 'black') gameArea.appendChild(createBar(whiteName, 'white'));
     else gameArea.appendChild(createBar(blackName, 'black'));
 
-    const boardWrap = document.createElement('div'); boardWrap.id = 'board-container';
+    const boardCont = document.createElement('div'); boardCont.id = 'board-container';
     const boardEl = document.createElement('div'); boardEl.id = 'board';
     
     let hints = [];
@@ -334,7 +299,7 @@ function render(forcedStatus) {
             boardEl.appendChild(sq);
         }
     }
-    boardWrap.appendChild(boardEl); gameArea.appendChild(boardWrap);
+    boardCont.appendChild(boardEl); gameArea.appendChild(boardCont);
 
     if(myColor === 'black') gameArea.appendChild(createBar(blackName, 'black'));
     else gameArea.appendChild(createBar(whiteName, 'white'));
@@ -342,25 +307,14 @@ function render(forcedStatus) {
     layout.appendChild(gameArea);
 
     const side = document.createElement('div'); side.id = 'side-panel';
-    side.innerHTML = `
-        <div id="status-box"><div id="status-text">${sTxt}</div></div>
-        <div class="btn-row">
-            <button class="action-btn" onclick="offerDraw()">Offer Draw</button>
-            <button class="action-btn" onclick="resignGame()">Resign</button>
-        </div>
-        <div id="history-container"></div>
-    `;
-    const hCont = side.querySelector('#history-container');
-    moveHistory.forEach((m, i) => {
-        hCont.innerHTML += `<div class="history-row"><div class="move-num">${i+1}.</div><div class="move-val">${m.w}</div><div class="move-val">${m.b}</div></div>`;
-    });
+    side.innerHTML = `<div id="status-box"><div id="status-text">${sTxt}</div></div>`;
     layout.appendChild(side);
     updateTimerDisplay();
 }
 
 function initGameState() {
     boardState = [['♜','♞','♝','♛','♚','♝','♞','♜'],['♟','♟','♟','♟','♟','♟','♟','♟'],['','','','','','','',''],['','','','','','','',''],['','','','','','','',''],['','','','','','','',''],['♙','♙','♙','♙','♙','♙','♙','♙'],['♖','♘','♗','♕','♔','♗','♘','♖']];
-    currentTurn = 'white'; hasMoved = {}; moveHistory = []; isGameOver = false; selected = null;
+    currentTurn = 'white'; hasMoved = {}; isGameOver = false; selected = null;
     if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
     if (!isInfinite) {
         window.chessIntervalInstance = setInterval(() => {
@@ -368,8 +322,7 @@ function initGameState() {
             if (currentTurn === 'white') whiteTime--; else blackTime--;
             updateTimerDisplay();
             if (whiteTime <= 0 || blackTime <= 0) { 
-                isGameOver = true; 
-                clearInterval(window.chessIntervalInstance);
+                isGameOver = true; clearInterval(window.chessIntervalInstance);
                 render(whiteTime <= 0 ? "BLACK WINS ON TIME" : "WHITE WINS ON TIME"); 
             }
         }, 1000);
