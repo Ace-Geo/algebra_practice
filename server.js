@@ -3,66 +3,53 @@ const app = express();
 const http = require('http').createServer(app);
 const io = require("socket.io")(http, { cors: { origin: "*" } });
 
-const rooms = {}; 
+const PORT = process.env.PORT || 3000;
+const roomSettings = {}; 
 
 io.on("connection", (socket) => {
-    socket.on("create-room", (data) => {
-        if (rooms[data.code]) {
-            return socket.emit("error-msg", "Room code already taken!");
+    socket.on("join-room", (data) => {
+        const { password, name, mins } = data;
+        const room = io.sockets.adapter.rooms.get(password);
+        const numClients = room ? room.size : 0;
+        const safeName = name || "Anonymous";
+
+        if (numClients === 0) {
+            socket.join(password);
+            roomSettings[password] = { mins: mins || 10, whiteName: safeName };
+            socket.emit("player-assignment", { color: "white", settings: roomSettings[password] });
+        } else if (numClients === 1) {
+            socket.join(password);
+            const settings = roomSettings[password];
+            socket.emit("player-assignment", { color: "black", settings: settings });
+            socket.to(password).emit("opponent-joined", { blackName: safeName });
+        } else {
+            socket.emit("error-msg", "Room is full!");
         }
-        
-        let color = data.prefColor;
-        if (color === 'random') color = Math.random() > 0.5 ? 'white' : 'black';
-
-        rooms[data.code] = {
-            creatorId: socket.id,
-            creatorName: data.name,
-            creatorColor: color,
-            settings: { mins: data.mins, secs: data.secs, inc: data.inc },
-            status: 'waiting'
-        };
-        socket.join(data.code);
-        socket.emit("waiting-for-opponent");
     });
 
-    socket.on("join-attempt", (data) => {
-        const room = rooms[data.code];
-        if (!room) return socket.emit("error-msg", "Room not found!");
-        if (room.status !== 'waiting') return socket.emit("error-msg", "Room is full!");
+    socket.on("send-move", (data) => {
+        socket.to(data.password).emit("receive-move", data);
+    });
 
-        const joinerColor = room.creatorColor === 'white' ? 'black' : 'white';
-        socket.emit("confirm-join", {
-            creatorName: room.creatorName,
-            settings: room.settings,
-            yourColor: joinerColor
+    // NEW: Resignation and Draw Logic
+    socket.on("resign", (data) => {
+        socket.to(data.password).emit("opponent-resigned", { winner: data.winner });
+    });
+
+    socket.on("offer-draw", (data) => {
+        socket.to(data.password).emit("draw-offered");
+    });
+
+    socket.on("draw-response", (data) => {
+        socket.to(data.password).emit("draw-resolved", { accepted: data.accepted });
+    });
+
+    socket.on("disconnecting", () => {
+        socket.rooms.forEach(room => {
+            const clients = io.sockets.adapter.rooms.get(room);
+            if (clients && clients.size === 1) delete roomSettings[room];
         });
     });
-
-    socket.on("join-confirmed", (data) => {
-        const room = rooms[data.code];
-        if (!room) return;
-
-        socket.join(data.code);
-        room.status = 'active';
-        room.joinerName = data.name;
-
-        const joinerColor = room.creatorColor === 'white' ? 'black' : 'white';
-        
-        // Start Game for both
-        io.to(data.code).emit("game-start", {
-            whiteName: joinerColor === 'white' ? data.name : room.creatorName,
-            blackName: joinerColor === 'black' ? data.name : room.creatorName,
-            settings: room.settings
-        });
-
-        // Send individual color assignments
-        io.to(room.creatorId).emit("assign-color", room.creatorColor);
-        socket.emit("assign-color", joinerColor);
-    });
-
-    socket.on("send-move", (data) => socket.to(data.code).emit("receive-move", data));
-    socket.on("offer-draw", (data) => socket.to(data.code).emit("draw-offered"));
-    socket.on("resign", (data) => io.to(data.code).emit("game-over", { winner: data.side === 'white' ? 'black' : 'white' }));
 });
 
-http.listen(process.env.PORT || 3000);
+http.listen(PORT, () => console.log(`Server running on port ${PORT}`));
