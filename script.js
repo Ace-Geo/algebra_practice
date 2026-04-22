@@ -127,47 +127,54 @@ function getNotation(fR, fC, tR, tC, piece, target, isEP, castle) {
 
 // --- 3. GAME ACTIONS ---
 function handleActualMove(from, to, isLocal) {
-    const p = boardState[from.r][from.c];
-    const isEP = (p==='♙'||p==='♟') && enPassantTarget?.r === to.r && enPassantTarget?.c === to.c;
+    const movingPiece = boardState[from.r][from.c];
+    const targetPiece = boardState[to.r][to.c];
+    const isEP = (movingPiece==='♙'||movingPiece==='♟') && enPassantTarget?.r === to.r && enPassantTarget?.c === to.c;
+    
     let castle = null;
-    if((p==='♔'||p==='♚') && Math.abs(from.c - to.c) === 2) {
+    if((movingPiece==='♔'||movingPiece==='♚') && Math.abs(from.c - to.c) === 2) {
         castle = to.c === 6 ? 'short' : 'long';
         const rO = to.c === 6 ? 7 : 0, rN = to.c === 6 ? 5 : 3;
         boardState[to.r][rN] = boardState[to.r][rO]; boardState[to.r][rO] = '';
     }
-    let note = getNotation(from.r, from.c, to.r, to.c, p, boardState[to.r][to.c], isEP, castle);
+
+    let note = getNotation(from.r, from.c, to.r, to.c, movingPiece, targetPiece, isEP, castle);
+    
     if(isEP) boardState[from.r][to.c] = '';
     hasMoved[`${from.r},${from.c}`] = 1; 
-    boardState[to.r][to.c] = p; boardState[from.r][from.c] = '';
-    if(p==='♙'&& to.r===0) boardState[to.r][to.c] = '♕'; if(p==='♟'&& to.r===7) boardState[to.r][to.c] = '♛';
+    boardState[to.r][to.c] = movingPiece; boardState[from.r][from.c] = '';
     
+    // Promotion
+    if(movingPiece==='♙' && to.r===0) boardState[to.r][to.c] = '♕'; 
+    if(movingPiece==='♟' && to.r===7) boardState[to.r][to.c] = '♛';
+
     const movingTeam = currentTurn;
-    currentTurn = currentTurn === 'white' ? 'black' : 'white';
+    currentTurn = (currentTurn === 'white') ? 'black' : 'white';
     
+    // Check game state for the NEXT player
     const check = isInCheck(currentTurn, boardState);
     const movesAvailable = hasLegalMoves(currentTurn);
-    
     let forcedStatus = null;
-    if (check) {
-        if (!movesAvailable) {
-            note += '#';
-            isGameOver = true;
-            if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
-            forcedStatus = `CHECKMATE! ${movingTeam.toUpperCase()} WINS`;
-        } else {
-            note += '+';
-        }
-    } else if (!movesAvailable) {
+
+    if (!movesAvailable) {
         isGameOver = true;
         if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
-        forcedStatus = "DRAW BY STALEMATE";
+        if (check) {
+            note += '#';
+            forcedStatus = `CHECKMATE! ${movingTeam.toUpperCase()} WINS`;
+        } else {
+            forcedStatus = "DRAW BY STALEMATE";
+        }
+    } else if (check) {
+        note += '+';
     }
 
     if(movingTeam === 'white') moveHistory.push({w: note, b: ''}); 
     else moveHistory[moveHistory.length-1].b = note;
 
-    enPassantTarget = (p==='♙'||p==='♟') && Math.abs(from.r - to.r) === 2 ? {r:(from.r+to.r)/2, c: to.c} : null;
+    enPassantTarget = (movingPiece==='♙'||movingPiece==='♟') && Math.abs(from.r - to.r) === 2 ? {r:(from.r+to.r)/2, c: to.c} : null;
     selected = null;
+    
     if (isLocal) socket.emit("send-move", { password: currentPassword, move: { from, to }, whiteTime, blackTime });
     render(forcedStatus);
 }
@@ -225,10 +232,8 @@ function render(forcedStatus) {
     layout.replaceChildren();
 
     const check = isInCheck(currentTurn, boardState);
-    let sTxt = forcedStatus;
-    if (!sTxt) {
-        sTxt = `${currentTurn.toUpperCase()}'S TURN ${check ? '(CHECK!)' : ''}`;
-    }
+    // Determine status text: if forcedStatus exists (Mate/Resign), use it. Else use Turn.
+    let sTxt = forcedStatus || `${currentTurn.toUpperCase()}'S TURN ${check ? '(CHECK!)' : ''}`;
 
     const gameArea = document.createElement('div');
     gameArea.id = 'game-area';
@@ -258,6 +263,7 @@ function render(forcedStatus) {
             const piece = boardState[r][c];
             sq.className = `square ${(r+c)%2===0 ? 'white-sq' : 'black-sq'}`;
             
+            // Highlight King if in check
             if (check && (piece === (currentTurn === 'white' ? '♔' : '♚'))) {
                 sq.classList.add('king-check');
             }
