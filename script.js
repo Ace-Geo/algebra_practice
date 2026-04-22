@@ -109,7 +109,7 @@ function joinRoom() {
 
 function confirmJoin() { socket.emit("confirm-join", { password: currentPassword, name: tempName }); }
 
-// --- 3. CHESS MECHANICS (FIXED SIMULATION) ---
+// --- 3. CORE CHESS LOGIC ---
 const isWhite = (c) => ['♖', '♘', '♗', '♕', '♔', '♙'].includes(c);
 const getTeam = (c) => c === '' ? null : (isWhite(c) ? 'white' : 'black');
 const getPieceNotation = (p) => {
@@ -125,94 +125,118 @@ function getNotation(fR, fC, tR, tC, piece, target, isEP, castle) {
     return p + cap + files[tC] + rows[tR];
 }
 
-function validateMoveMechanics(fR, fC, tR, tC, p, tar, b) {
+// Strictly evaluates if a piece can physically reach a square, ignoring check discovery
+function canAttackSquare(fR, fC, tR, tC, p, b) {
     const dr = tR-fR, dc = tC-fC, adr = Math.abs(dr), adc = Math.abs(dc), team = getTeam(p);
-    if (tar !== '' && getTeam(tar) === team) return false;
-    const clear = (r1, c1, r2, c2) => {
+    
+    const clearPath = (r1, c1, r2, c2) => {
         const sr = r2 === r1 ? 0 : (r2-r1)/Math.abs(r2-r1), sc = c2 === c1 ? 0 : (c2-c1)/Math.abs(c2-c1);
         let cr = r1+sr, cc = c1+sc;
         while(cr !== r2 || cc !== c2) { if (b[cr][cc] !== '') return false; cr+=sr; cc+=sc; }
         return true;
     };
+
     if (p === '♙' || p === '♟') {
         const dir = team === 'white' ? -1 : 1;
-        if (dc === 0 && tar === '') return dr === dir || (dr === 2*dir && fR === (team === 'white'?6:1) && b[fR+dir][fC] === '');
-        if (adc === 1 && dr === dir) return tar !== '' || (enPassantTarget && enPassantTarget.r === tR && enPassantTarget.c === tC);
+        return adc === 1 && dr === dir; // For attack, pawns only hit diagonals
+    }
+    if (['♖','♜'].includes(p)) return (dr===0 || dc===0) && clearPath(fR,fC,tR,tC);
+    if (['♘','♞'].includes(p)) return (adr===2 && adc===1) || (adr===1 && adc===2);
+    if (['♗','♝'].includes(p)) return adr===adc && clearPath(fR,fC,tR,tC);
+    if (['♕','♛'].includes(p)) return (adr===adc || dr===0 || dc===0) && clearPath(fR,fC,tR,tC);
+    if (['♔','♚'].includes(p)) return adr<=1 && adc<=1;
+    return false;
+}
+
+// Logic for normal moves including double jumps, castling, and en-passant
+function canMoveTo(fR, fC, tR, tC, p, b) {
+    const dr = tR-fR, dc = tC-fC, adr = Math.abs(dr), adc = Math.abs(dc), team = getTeam(p);
+    const target = b[tR][tC];
+    if (target !== '' && getTeam(target) === team) return false;
+
+    const clearPath = (r1, c1, r2, c2) => {
+        const sr = r2 === r1 ? 0 : (r2-r1)/Math.abs(r2-r1), sc = c2 === c1 ? 0 : (c2-c1)/Math.abs(c2-c1);
+        let cr = r1+sr, cc = c1+sc;
+        while(cr !== r2 || cc !== c2) { if (b[cr][cc] !== '') return false; cr+=sr; cc+=sc; }
+        return true;
+    };
+
+    if (p === '♙' || p === '♟') {
+        const dir = team === 'white' ? -1 : 1;
+        if (dc === 0 && target === '') {
+            return dr === dir || (dr === 2*dir && fR === (team === 'white'?6:1) && b[fR+dir][fC] === '');
+        }
+        if (adc === 1 && dr === dir) {
+            return target !== '' || (enPassantTarget && enPassantTarget.r === tR && enPassantTarget.c === tC);
+        }
         return false;
     }
-    if (['♖','♜'].includes(p)) return (dr===0 || dc===0) && clear(fR,fC,tR,tC);
-    if (['♘','♞'].includes(p)) return (adr===2 && adc===1) || (adr===1 && adc===2);
-    if (['♗','♝'].includes(p)) return adr===adc && clear(fR,fC,tR,tC);
-    if (['♕','♛'].includes(p)) return (adr===adc || dr===0 || dc===0) && clear(fR,fC,tR,tC);
-    if (['♔','♚'].includes(p)) {
-        if (adr<=1 && adc<=1) return true;
-        if (adc===2 && dr===0 && !hasMoved[`${fR},${fC}`]) {
-            const rC = tC===6?7:0; return b[fR][rC]!=='' && !hasMoved[`${fR},${rC}`] && clear(fR,fC,fR,rC);
+    if (['♔','♚'].includes(p) && adc === 2) {
+        if (hasMoved[`${fR},${fC}`] || isSquareAttacked(fR, fC, team === 'white' ? 'black' : 'white', b)) return false;
+        const rC = tC === 6 ? 7 : 0, rPiece = b[fR][rC];
+        return rPiece !== '' && !hasMoved[`${fR},${rC}`] && clearPath(fR, fC, fR, rC);
+    }
+    return canAttackSquare(fR, fC, tR, tC, p, b);
+}
+
+function isSquareAttacked(r, c, attackerTeam, b) {
+    for(let i=0; i<8; i++) {
+        for(let j=0; j<8; j++) {
+            const p = b[i][j];
+            if(p !== '' && getTeam(p) === attackerTeam && canAttackSquare(i, j, r, c, p, b)) return true;
         }
     }
     return false;
 }
 
-function isInCheck(team, b) {
-    const kingSymbol = (team === 'white' ? '♔' : '♚');
-    let kr = -1, kc = -1;
-
-    for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
-            if (b[r][c] === kingSymbol) { kr = r; kc = c; break; }
-        }
-        if (kr !== -1) break;
-    }
-
-    if (kr === -1) return false;
-    const enemyTeam = (team === 'white' ? 'black' : 'white');
-
-    for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
-            const piece = b[r][c];
-            if (piece !== '' && getTeam(piece) === enemyTeam) {
-                if (validateMoveMechanics(r, c, kr, kc, piece, b[kr][kc], b)) return true;
-            }
-        }
-    }
-    return false;
+function getKingPos(team, b) {
+    const k = team === 'white' ? '♔' : '♚';
+    for(let r=0; r<8; r++) for(let c=0; c<8; c++) if(b[r][c] === k) return {r, c};
+    return null;
 }
 
-function moveIsLegal(fR, fC, tR, tC, p, team) {
-    if (!validateMoveMechanics(fR, fC, tR, tC, p, boardState[tR][tC], boardState)) return false;
-    const temp = boardState.map(r => [...r]);
-    temp[tR][tC] = p; temp[fR][fC] = '';
-    if ((p==='♙'||p==='♟') && enPassantTarget?.r === tR && enPassantTarget?.c === tC) temp[fR][tC] = '';
-    return !isInCheck(team, temp);
+function isTeamInCheck(team, b) {
+    const pos = getKingPos(team, b);
+    return pos ? isSquareAttacked(pos.r, pos.c, team === 'white' ? 'black' : 'white', b) : false;
 }
 
-function hasLegalMoves(team) {
-    for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
-            const p = boardState[r][c];
-            if (p !== '' && getTeam(p) === team) {
-                for (let tr = 0; tr < 8; tr++) {
-                    for (let tc = 0; tc < 8; tc++) {
-                        if (moveIsLegal(r, c, tr, tc, p, team)) return true;
+function isMoveLegal(fR, fC, tR, tC, team) {
+    const p = boardState[fR][fC];
+    if (!canMoveTo(fR, fC, tR, tC, p, boardState)) return false;
+    
+    // Simulate board
+    const nextBoard = boardState.map(row => [...row]);
+    nextBoard[tR][tC] = p;
+    nextBoard[fR][fC] = '';
+    // Handle EP capture in simulation
+    if ((p==='♙'||p==='♟') && enPassantTarget?.r === tR && enPassantTarget?.c === tC) nextBoard[fR][tC] = '';
+    
+    return !isTeamInCheck(team, nextBoard);
+}
+
+function getLegalMoves(team) {
+    let moves = [];
+    for(let r=0; r<8; r++) {
+        for(let c=0; c<8; c++) {
+            if(getTeam(boardState[r][c]) === team) {
+                for(let tr=0; tr<8; tr++) {
+                    for(let tc=0; tc<8; tc++) {
+                        if(isMoveLegal(r, c, tr, tc, team)) moves.push({from: {r,c}, to: {r:tr, c:tc}});
                     }
                 }
             }
         }
     }
-    return false;
+    return moves;
 }
 
 // --- 4. GAME ACTIONS ---
 function handleActualMove(from, to, isLocal) {
     if (isGameOver) return;
-
     const movingPiece = boardState[from.r][from.c];
     const targetPiece = boardState[to.r][to.c];
-    const movingTeam = currentTurn;
-    const opponentTeam = (movingTeam === 'white' ? 'black' : 'white');
-    
-    const isEP = (movingPiece === '♙' || movingPiece === '♟') && 
-                 enPassantTarget?.r === to.r && enPassantTarget?.c === to.c;
+    const team = currentTurn;
+    const isEP = (movingPiece === '♙' || movingPiece === '♟') && enPassantTarget?.r === to.r && enPassantTarget?.c === to.c;
     
     let castle = null;
     if ((movingPiece === '♔' || movingPiece === '♚') && Math.abs(from.c - to.c) === 2) {
@@ -225,7 +249,7 @@ function handleActualMove(from, to, isLocal) {
     let note = getNotation(from.r, from.c, to.r, to.c, movingPiece, targetPiece, isEP, castle);
 
     if (isEP) boardState[from.r][to.c] = '';
-    hasMoved[`${from.r},${from.c}`] = 1; 
+    hasMoved[`${from.r},${from.c}`] = 1;
     boardState[to.r][to.c] = movingPiece;
     boardState[from.r][from.c] = '';
     
@@ -233,23 +257,25 @@ function handleActualMove(from, to, isLocal) {
     if (movingPiece === '♟' && to.r === 7) boardState[to.r][to.c] = '♛';
 
     if (!isInfinite) {
-        if (movingTeam === 'white') whiteTime += increment;
+        if (team === 'white') whiteTime += increment;
         else blackTime += increment;
     }
 
-    // Switch turn before detection
-    currentTurn = opponentTeam;
+    enPassantTarget = (movingPiece === '♙' || movingPiece === '♟') && Math.abs(from.r - to.r) === 2 
+        ? { r: (from.r + to.r) / 2, c: to.c } : null;
 
-    const inCheck = isInCheck(currentTurn, boardState);
-    const canMove = hasLegalMoves(currentTurn);
+    currentTurn = (team === 'white' ? 'black' : 'white');
+    
+    const nextMoves = getLegalMoves(currentTurn);
+    const inCheck = isTeamInCheck(currentTurn, boardState);
     let forcedStatus = null;
 
-    if (!canMove) {
+    if (nextMoves.length === 0) {
         isGameOver = true;
         if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
         if (inCheck) {
             note += '#';
-            forcedStatus = `CHECKMATE! ${movingTeam.toUpperCase()} WINS`;
+            forcedStatus = `CHECKMATE! ${team.toUpperCase()} WINS`;
         } else {
             forcedStatus = "DRAW BY STALEMATE";
         }
@@ -257,23 +283,11 @@ function handleActualMove(from, to, isLocal) {
         note += '+';
     }
 
-    if (movingTeam === 'white') moveHistory.push({ w: note, b: '' });
+    if (team === 'white') moveHistory.push({ w: note, b: '' });
     else if (moveHistory.length > 0) moveHistory[moveHistory.length - 1].b = note;
 
-    enPassantTarget = (movingPiece === '♙' || movingPiece === '♟') && Math.abs(from.r - to.r) === 2 
-        ? { r: (from.r + to.r) / 2, c: to.c } 
-        : null;
     selected = null;
-
-    if (isLocal) {
-        socket.emit("send-move", { 
-            password: currentPassword, 
-            move: { from, to }, 
-            whiteTime, 
-            blackTime 
-        });
-    }
-
+    if (isLocal) socket.emit("send-move", { password: currentPassword, move: { from, to }, whiteTime, blackTime });
     render(forcedStatus);
 }
 
@@ -314,7 +328,7 @@ function render(forcedStatus) {
     if (!layout) return;
     layout.replaceChildren();
 
-    const check = isInCheck(currentTurn, boardState);
+    const check = isTeamInCheck(currentTurn, boardState);
     let sTxt = forcedStatus || (isGameOver ? "GAME OVER" : `${currentTurn.toUpperCase()}'S TURN ${check ? '(CHECK!)' : ''}`);
 
     const gameArea = document.createElement('div'); gameArea.id = 'game-area';
@@ -332,8 +346,7 @@ function render(forcedStatus) {
     
     let hints = [];
     if(selected && !isGameOver) {
-        const p = boardState[selected.r][selected.c];
-        for(let r=0; r<8; r++) for(let c=0; c<8; c++) if(moveIsLegal(selected.r, selected.c, r, c, p, currentTurn)) hints.push({r,c});
+        hints = getLegalMoves(currentTurn).filter(m => m.from.r === selected.r && m.from.c === selected.c).map(m => m.to);
     }
 
     const range = (myColor === 'black') ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
@@ -342,7 +355,7 @@ function render(forcedStatus) {
             const sq = document.createElement('div');
             const piece = boardState[r][c];
             sq.className = `square ${(r+c)%2===0 ? 'white-sq' : 'black-sq'}`;
-            if (check && !isGameOver && (piece === (currentTurn === 'white' ? '♔' : '♚'))) sq.classList.add('king-check');
+            if (check && !isGameOver && piece === (currentTurn === 'white' ? '♔' : '♚')) sq.classList.add('king-check');
             if(selected?.r===r && selected?.c===c) sq.classList.add('selected');
             if(hints.some(h => h.r===r && h.c===c)) {
                 const dot = document.createElement('div');
@@ -358,7 +371,7 @@ function render(forcedStatus) {
             sq.onclick = () => {
                 if(isGameOver || currentTurn !== myColor) return;
                 if(selected) {
-                    if(moveIsLegal(selected.r, selected.c, r, c, boardState[selected.r][selected.c], currentTurn)) handleActualMove(selected, {r,c}, true);
+                    if(hints.some(h => h.r === r && h.c === c)) handleActualMove(selected, {r,c}, true);
                     else { selected = getTeam(piece) === currentTurn ? {r,c} : null; render(); }
                 } else if(getTeam(piece) === currentTurn) { selected = {r,c}; render(); }
             };
@@ -366,22 +379,12 @@ function render(forcedStatus) {
         }
     }
     boardCont.appendChild(boardEl); gameArea.appendChild(boardCont);
-
     if(myColor === 'black') gameArea.appendChild(createBar(blackName, 'black'));
     else gameArea.appendChild(createBar(whiteName, 'white'));
-
     layout.appendChild(gameArea);
 
     const side = document.createElement('div'); side.id = 'side-panel';
-    side.innerHTML = `
-        <div id="status-box"><div id="status-text">${sTxt}</div></div>
-        <div id="notification-area"></div>
-        <div class="btn-row">
-            <button class="action-btn" onclick="offerDraw()" ${isGameOver ? 'disabled' : ''}>Offer Draw</button>
-            <button class="action-btn" onclick="resignGame()" ${isGameOver ? 'disabled' : ''}>Resign</button>
-        </div>
-        <div id="history-container"></div>
-    `;
+    side.innerHTML = `<div id="status-box"><div id="status-text">${sTxt}</div></div><div id="notification-area"></div><div class="btn-row"><button class="action-btn" onclick="offerDraw()" ${isGameOver ? 'disabled' : ''}>Offer Draw</button><button class="action-btn" onclick="resignGame()" ${isGameOver ? 'disabled' : ''}>Resign</button></div><div id="history-container"></div>`;
     const hCont = side.querySelector('#history-container');
     moveHistory.forEach((m, i) => {
         hCont.innerHTML += `<div class="history-row"><div class="move-num">${i+1}.</div><div class="move-val">${m.w}</div><div class="move-val">${m.b}</div></div>`;
