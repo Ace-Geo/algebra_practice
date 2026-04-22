@@ -1,24 +1,14 @@
-// 1. Change this URL to your actual Render URL
-const SERVER_URL = "https://algebra-but-better.onrender.com";
-const socket = io(SERVER_URL);
-
-// --- CONNECTION MONITOR ---
-socket.on("connect", () => console.log("Connected to server!"));
-socket.on("connect_error", (err) => {
-    console.error("Connection Error:", err);
-    // This will tell you if the server is the problem
-    alert("Server Connection Failed. Check if your Render app is awake.");
-});
+const socket = io("https://algebra-but-better.onrender.com");
 
 let myColor, currentPassword, increment;
 let whiteName, blackName, whiteTime, blackTime;
 let boardState, currentTurn, selected, isGameOver, isInfinite;
 let hasMoved = {}, enPassantTarget = null, moveHistory = [];
 
-const isWhite = (c) => ['♖','♙','♙','♘','♗','♕','♔'].includes(c);
+const isWhite = (c) => ['♖','♙','♘','♗','♕','♔'].includes(c);
 const getTeam = (c) => c === '' ? null : (isWhite(c) ? 'white' : 'black');
 
-// --- CHESS ENGINE ---
+// --- CHESS ENGINE LOGIC ---
 function validateMoveMechanics(fR, fC, tR, tC, p, tar, b) {
     const dr = tR-fR, dc = tC-fC, adr = Math.abs(dr), adc = Math.abs(dc), team = getTeam(p);
     if (tar !== '' && getTeam(tar) === team) return false;
@@ -60,102 +50,136 @@ function moveIsLegal(fR, fC, tR, tC, p, team) {
     return !isInCheck(team, temp);
 }
 
-function hasLegalMoves(team) {
-    for(let r=0; r<8; r++) for(let c=0; c<8; c++) {
-        if(boardState[r][c] !== '' && getTeam(boardState[r][c]) === team) {
-            for(let tr=0; tr<8; tr++) for(let tc=0; tc<8; tc++) 
-                if(moveIsLegal(r,c,tr,tc,boardState[r][c],team)) return true;
+// --- CORE RENDERING ---
+function render(statusOverride) {
+    const layout = document.getElementById('main-layout');
+    if (!layout) return;
+    
+    // Ensure game is visible
+    layout.style.visibility = 'visible';
+    layout.replaceChildren();
+
+    const gameArea = document.createElement('div');
+    const createBar = (name, id) => {
+        const div = document.createElement('div'); div.className = 'player-bar';
+        div.innerHTML = `<span>${name || 'Opponent'}</span><div id="timer-${id}" class="timer"></div>`;
+        return div;
+    };
+
+    gameArea.appendChild(createBar(myColor==='white'?blackName:whiteName, myColor==='white'?'black':'white'));
+    
+    const boardEl = document.createElement('div'); boardEl.id = 'board';
+    const range = myColor === 'black' ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
+    
+    for(let r of range) {
+        for(let c of range) {
+            const sq = document.createElement('div');
+            const piece = boardState[r][c];
+            sq.className = `square ${(r+c)%2===0 ? 'white-sq' : 'black-sq'}`;
+            
+            if(piece) {
+                const sp = document.createElement('span'); 
+                sp.className = `piece ${isWhite(piece)?'w-piece':'b-piece'}`;
+                sp.textContent = piece; 
+                sq.appendChild(sp);
+            }
+
+            sq.onclick = () => {
+                if (currentTurn !== myColor || isGameOver) return;
+                if (selected && moveIsLegal(selected.r, selected.c, r, c, boardState[selected.r][selected.c], currentTurn)) {
+                    handleActualMove(selected, {r,c}, true);
+                } else {
+                    selected = getTeam(piece) === currentTurn ? {r,c} : null;
+                    render();
+                }
+            };
+            boardEl.appendChild(sq);
         }
     }
-    return false;
+    
+    gameArea.appendChild(boardEl);
+    gameArea.appendChild(createBar(myColor==='white'?whiteName:blackName, myColor==='white'?'white':'black'));
+    layout.appendChild(gameArea);
+
+    const side = document.createElement('div'); side.id = 'side-panel';
+    side.innerHTML = `<div id="status-box">${statusOverride || currentTurn.toUpperCase() + "'S TURN"}</div><div id="history-container"></div>`;
+    layout.appendChild(side);
+    updateTimerDisplay();
 }
+
+function handleActualMove(from, to, isLocal) {
+    const p = boardState[from.r][from.c];
+    boardState[to.r][to.c] = p;
+    boardState[from.r][from.c] = '';
+    
+    if (isLocal) {
+        socket.emit("send-move", { password: currentPassword, move: {from, to}, whiteTime, blackTime });
+    }
+    currentTurn = currentTurn === 'white' ? 'black' : 'white';
+    selected = null;
+    render();
+}
+
+// --- SOCKET EVENTS ---
+socket.on("game-start", (data) => {
+    console.log("Game Starting...");
+    whiteName = data.whiteName; 
+    blackName = data.blackName;
+    whiteTime = (parseInt(data.settings.mins) * 60);
+    blackTime = whiteTime;
+    isInfinite = (whiteTime === 0);
+    
+    document.getElementById('setup-overlay').style.display = 'none';
+    
+    // Reset Board
+    boardState = [['♜','♞','♝','♛','♚','♝','♞','♜'],['♟','♟','♟','♟','♟','♟','♟','♟'],['','','','','','','',''],['','','','','','','',''],['','','','','','','',''],['','','','','','','',''],['♙','♙','♙','♙','♙','♙','♙','♙'],['♖','♘','♗','♕','♔','♗','♘','♖']];
+    currentTurn = 'white';
+    isGameOver = false;
+    
+    render();
+});
+
+socket.on("assign-color", (c) => { 
+    myColor = c; 
+    console.log("Assigned color:", myColor);
+});
+
+socket.on("receive-move", (d) => {
+    handleActualMove(d.move.from, d.move.to, false);
+});
 
 // --- SETUP UI ---
 function showSetup() {
     const overlay = document.getElementById('setup-overlay');
-    if (!overlay) return;
-    let tab = 'create';
-
-    const draw = () => {
-        overlay.innerHTML = `
+    overlay.innerHTML = `
         <div class="setup-card">
-            <div class="tab-btns">
-                <button class="tab-btn ${tab==='create'?'active':''}" id="btn-tab-create">CREATE</button>
-                <button class="tab-btn ${tab==='join'?'active':''}" id="btn-tab-join">JOIN</button>
-            </div>
-            <div class="input-group">
-                <label>Room Password</label>
-                <input id="roomPass" type="text" placeholder="e.g. 1234">
-            </div>
-            <div class="input-group">
-                <label>Your Name</label>
-                <input id="uName" value="Player">
-            </div>
-            ${tab==='create' ? `
-                <div class="input-group">
-                    <label>Mins | Secs | Inc</label>
-                    <div class="time-row">
-                        <input type="number" id="tM" value="10">
-                        <input type="number" id="tS" value="0">
-                        <input type="number" id="tI" value="0">
-                    </div>
-                </div>
-                <div class="input-group">
-                    <label>Play As</label>
-                    <select id="pC">
-                        <option value="white">White</option>
-                        <option value="black">Black</option>
-                        <option value="random">Random</option>
-                    </select>
-                </div>
-            ` : ''}
-            <button class="start-btn" id="final-go-button">START GAME</button>
+            <h2>Chess Room</h2>
+            <input id="roomPass" type="text" placeholder="Password">
+            <input id="uName" value="Player">
+            <button class="start-btn" id="createBtn">CREATE</button>
+            <button class="start-btn" id="joinBtn" style="background:#3c3a37">JOIN</button>
         </div>`;
 
-        // Manual event listeners to ensure they work
-        document.getElementById('btn-tab-create').onclick = () => { tab='create'; draw(); };
-        document.getElementById('btn-tab-join').onclick = () => { tab='join'; draw(); };
-        
-        document.getElementById('final-go-button').onclick = () => {
-            const pass = document.getElementById('roomPass').value;
-            const name = document.getElementById('uName').value;
-            if(!pass) return alert("Enter a password!");
-
-            currentPassword = pass;
-            if (tab === 'create') {
-                socket.emit("create-room", { 
-                    password: pass, 
-                    name, 
-                    mins: document.getElementById('tM').value, 
-                    secs: document.getElementById('tS').value, 
-                    inc: document.getElementById('tI').value, 
-                    preferredColor: document.getElementById('pC').value 
-                });
-                overlay.innerHTML = `<div class="setup-card"><h2>Waiting for opponent...</h2><p>Password: ${pass}</p></div>`;
-            } else {
-                socket.emit("join-attempt", { password: pass, name });
-            }
-        };
+    document.getElementById('createBtn').onclick = () => {
+        currentPassword = document.getElementById('roomPass').value;
+        socket.emit("create-room", { password: currentPassword, name: document.getElementById('uName').value, mins: 10, secs: 0, inc: 0, preferredColor: 'white' });
+        overlay.innerHTML = "<h2>Waiting for opponent...</h2>";
     };
-    draw();
+
+    document.getElementById('joinBtn').onclick = () => {
+        currentPassword = document.getElementById('roomPass').value;
+        socket.emit("join-attempt", { password: currentPassword, name: document.getElementById('uName').value });
+    };
 }
 
-// --- GAME START ---
-socket.on("game-start", (data) => {
-    whiteName = data.whiteName; blackName = data.blackName;
-    whiteTime = (parseInt(data.settings.mins) * 60) + parseInt(data.settings.secs);
-    blackTime = whiteTime; increment = parseInt(data.settings.inc); 
-    isInfinite = (whiteTime === 0);
-    document.getElementById('setup-overlay').style.display = 'none';
-    document.getElementById('main-layout').style.visibility = 'visible';
-    initGameState();
+socket.on("confirm-settings", (d) => {
+    socket.emit("join-confirmed", { password: currentPassword, name: document.getElementById('uName').value });
 });
 
-socket.on("assign-color", (c) => { myColor = c; });
-socket.on("confirm-settings", (d) => {
-    if(confirm(`Join game by ${d.creatorName}?`)) {
-        socket.emit("join-confirmed", { password: currentPassword, name: document.getElementById('uName').value });
-    }
-});
+function updateTimerDisplay() {
+    const wT = document.getElementById('timer-white'), bT = document.getElementById('timer-black');
+    if (wT) wT.textContent = isInfinite ? "∞" : "10:00";
+    if (bT) bT.textContent = isInfinite ? "∞" : "10:00";
+}
 
 window.onload = showSetup;
