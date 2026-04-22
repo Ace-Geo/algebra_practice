@@ -109,7 +109,7 @@ function joinRoom() {
 
 function confirmJoin() { socket.emit("confirm-join", { password: currentPassword, name: tempName }); }
 
-// --- 3. CHESS MECHANICS (FIXED DETECTION) ---
+// --- 3. CHESS MECHANICS (FIXED SIMULATION) ---
 const isWhite = (c) => ['♖', '♘', '♗', '♕', '♔', '♙'].includes(c);
 const getTeam = (c) => c === '' ? null : (isWhite(c) ? 'white' : 'black');
 const getPieceNotation = (p) => {
@@ -154,13 +154,25 @@ function validateMoveMechanics(fR, fC, tR, tC, p, tar, b) {
 }
 
 function isInCheck(team, b) {
-    const k = team === 'white' ? '♔' : '♚', atkTeam = team==='white'?'black':'white';
+    const kingSymbol = (team === 'white' ? '♔' : '♚');
     let kr = -1, kc = -1;
-    for(let r=0; r<8; r++) for(let c=0; c<8; c++) if(b[r][c]===k){kr=r;kc=c;}
-    if(kr === -1) return false;
-    for(let i=0; i<8; i++) for(let j=0; j<8; j++) {
-        if(b[i][j]!=='' && getTeam(b[i][j])===atkTeam) {
-            if(validateMoveMechanics(i,j,kr,kc,b[i][j],b[kr][kc],b)) return true;
+
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            if (b[r][c] === kingSymbol) { kr = r; kc = c; break; }
+        }
+        if (kr !== -1) break;
+    }
+
+    if (kr === -1) return false;
+    const enemyTeam = (team === 'white' ? 'black' : 'white');
+
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            const piece = b[r][c];
+            if (piece !== '' && getTeam(piece) === enemyTeam) {
+                if (validateMoveMechanics(r, c, kr, kc, piece, b[kr][kc], b)) return true;
+            }
         }
     }
     return false;
@@ -197,7 +209,7 @@ function handleActualMove(from, to, isLocal) {
     const movingPiece = boardState[from.r][from.c];
     const targetPiece = boardState[to.r][to.c];
     const movingTeam = currentTurn;
-    const opponentTeam = movingTeam === 'white' ? 'black' : 'white';
+    const opponentTeam = (movingTeam === 'white' ? 'black' : 'white');
     
     const isEP = (movingPiece === '♙' || movingPiece === '♟') && 
                  enPassantTarget?.r === to.r && enPassantTarget?.c === to.c;
@@ -225,10 +237,9 @@ function handleActualMove(from, to, isLocal) {
         else blackTime += increment;
     }
 
-    // Switch Turn BEFORE detection
-    currentTurn = opponentTeam; 
+    // Switch turn before detection
+    currentTurn = opponentTeam;
 
-    // Win Detection (Critical Fix)
     const inCheck = isInCheck(currentTurn, boardState);
     const canMove = hasLegalMoves(currentTurn);
     let forcedStatus = null;
