@@ -1,114 +1,110 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const path = require('path');
+body {
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #272522;
+    color: #fff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+}
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-    cors: { origin: "*" }
-});
+#setup-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.8);
+    display: flex; justify-content: center; align-items: center;
+    z-index: 1000;
+}
 
-app.use(express.static(path.join(__dirname, 'public')));
+.setup-card {
+    background: #312e2b;
+    padding: 30px;
+    border-radius: 8px;
+    width: 350px;
+    text-align: center;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+}
 
-let rooms = {};
-let roomRematchStates = {}; 
+.tabs { display: flex; margin-bottom: 20px; background: #262421; border-radius: 5px; padding: 5px; }
+.tabs button {
+    flex: 1; padding: 10px; border: none; background: none; color: #bababa;
+    cursor: pointer; font-weight: bold; transition: 0.2s;
+}
+.tabs button.active { background: #454241; color: #fff; border-radius: 4px; }
 
-io.on("connection", (socket) => {
-    socket.on("create-room", (data) => {
-        const { password, name, mins, secs, inc, colorPref } = data;
-        if (rooms[password]) {
-            socket.emit("error-msg", "Room already exists");
-            return;
-        }
-        rooms[password] = {
-            creator: socket.id,
-            creatorName: name,
-            settings: { mins, secs, inc },
-            colorPref,
-            players: [{ id: socket.id, name }]
-        };
-        socket.join(password);
-        socket.emit("room-created", { password });
-    });
+.input-group { text-align: left; margin-bottom: 15px; }
+.input-group label { display: block; font-size: 12px; color: #bababa; margin-bottom: 5px; text-transform: uppercase; }
+.input-group input, .input-group select {
+    width: 100%; padding: 10px; background: #262421; border: 1px solid #403d39;
+    color: #fff; border-radius: 4px; box-sizing: border-box;
+}
 
-    socket.on("join-attempt", (data) => {
-        const room = rooms[data.password];
-        if (!room) return socket.emit("error-msg", "Room not found");
-        if (room.players.length >= 2) return socket.emit("error-msg", "Room full");
-        
-        socket.emit("preview-settings", {
-            settings: room.settings,
-            creatorName: room.creatorName,
-            creatorColorPref: room.colorPref
-        });
-    });
+.start-btn {
+    width: 100%; padding: 15px; background: #779556; border: none;
+    color: #fff; font-weight: bold; font-size: 18px; border-radius: 4px;
+    cursor: pointer; margin-top: 10px;
+}
+.start-btn:hover { background: #8dbb5c; }
 
-    socket.on("confirm-join", (data) => {
-        const room = rooms[data.password];
-        if (!room || room.players.length >= 2) return;
+.action-btn {
+    background: #3c3a39; color: #bababa; border: none; padding: 8px 15px;
+    border-radius: 4px; cursor: pointer; font-weight: bold;
+}
+.action-btn:hover { background: #454241; color: #fff; }
 
-        const guestName = data.name || "Guest";
-        room.players.push({ id: socket.id, name: guestName });
-        socket.join(data.password);
+#main-layout { display: flex; gap: 20px; padding: 20px; max-width: 1200px; width: 100%; height: 90vh; }
+#game-area { flex: 2; display: flex; flex-direction: column; gap: 10px; }
+#board-container { aspect-ratio: 1/1; background: #312e2b; padding: 10px; border-radius: 4px; }
+#board { display: grid; grid-template-columns: repeat(8, 1fr); width: 100%; height: 100%; user-select: none; }
 
-        let whiteId, blackId;
-        const creator = room.players[0];
-        const guest = room.players[1];
+.square { position: relative; display: flex; justify-content: center; align-items: center; cursor: pointer; }
+.white-sq { background: #ebecd0; }
+.black-sq { background: #779556; }
+.selected { background: #f6f669 !important; }
+.king-check { background: #ff4d4d !important; }
 
-        if (room.colorPref === 'white') {
-            whiteId = creator.id; blackId = guest.id;
-        } else if (room.colorPref === 'black') {
-            whiteId = guest.id; blackId = creator.id;
-        } else {
-            if (Math.random() > 0.5) {
-                whiteId = creator.id; blackId = guest.id;
-            } else {
-                whiteId = guest.id; blackId = creator.id;
-            }
-        }
+.piece { font-size: 50px; z-index: 10; cursor: grab; }
+.w-piece { color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+.b-piece { color: #000; }
 
-        io.to(whiteId).emit("player-assignment", { color: 'white', settings: room.settings, oppName: guest.id === whiteId ? creator.name : guest.name });
-        io.to(blackId).emit("player-assignment", { color: 'black', settings: room.settings, oppName: guest.id === blackId ? creator.name : guest.name });
-    });
+.hint-dot { width: 25%; height: 25%; background: rgba(0,0,0,0.1); border-radius: 50%; }
+.hint-capture { width: 80%; height: 80%; border: 4px solid rgba(0,0,0,0.1); border-radius: 50%; position: absolute; }
 
-    socket.on("send-move", (data) => {
-        socket.to(data.password).emit("receive-move", data);
-    });
+.player-bar { display: flex; justify-content: space-between; align-items: center; background: #262421; padding: 10px 15px; border-radius: 4px; }
+.timer { background: #3c3a39; padding: 5px 15px; border-radius: 4px; font-family: monospace; font-size: 20px; font-weight: bold; color: #bababa; }
+.timer.active { background: #fff; color: #000; }
 
-    socket.on("resign", (data) => {
-        io.in(data.password).emit("opponent-resigned", { winner: data.winner });
-    });
+#side-panel { flex: 1; display: flex; flex-direction: column; background: #262421; border-radius: 4px; overflow: hidden; }
+#status-box { padding: 20px; background: #211f1c; text-align: center; border-bottom: 1px solid #3c3a39; }
+#status-text { font-weight: bold; color: #779556; font-size: 18px; }
+#history-container { flex: 1; overflow-y: auto; padding: 10px; font-size: 14px; }
+.history-row { display: flex; padding: 5px 0; border-bottom: 1px solid #312e2b; }
+.move-num { width: 30px; color: #63615e; }
+.move-val { flex: 1; font-weight: bold; }
+.btn-row { display: flex; gap: 10px; padding: 15px; background: #211f1c; }
 
-    socket.on("offer-draw", (data) => {
-        socket.to(data.password).emit("draw-offered");
-    });
+/* NEW: RESULT MODAL */
+#game-over-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex; justify-content: center; align-items: center;
+    z-index: 2000;
+}
+.result-card {
+    background: #262421; padding: 30px; border-radius: 12px; text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 2px solid #779556; width: 320px;
+}
+.result-card h2 { color: #779556; margin-top: 0; }
+.modal-btns { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+#rematch-btn { background: #779556; color: white; border: none; padding: 12px; border-radius: 5px; font-weight: bold; cursor: pointer; }
+#rematch-btn:disabled { background: #4a5d36; cursor: not-allowed; }
+.rematch-ready { animation: pulse 1.5s infinite; background: #8dbb5c !important; }
 
-    socket.on("draw-response", (data) => {
-        io.in(data.password).emit("draw-resolved", { accepted: data.accepted });
-    });
-
-    // --- REMATCH LOGIC ---
-    socket.on("rematch-request", (data) => {
-        const roomPass = data.password;
-        if (!roomRematchStates[roomPass]) roomRematchStates[roomPass] = new Set();
-
-        roomRematchStates[roomPass].add(socket.id);
-        socket.to(roomPass).emit("rematch-offered");
-
-        if (roomRematchStates[roomPass].size === 2) {
-            roomRematchStates[roomPass].clear();
-            io.in(roomPass).emit("rematch-start");
-        }
-    });
-
-    socket.on("disconnecting", () => {
-        for (const room of socket.rooms) {
-            if (rooms[room]) delete rooms[room];
-            if (roomRematchStates[room]) delete roomRematchStates[room];
-        }
-    });
-});
-
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
