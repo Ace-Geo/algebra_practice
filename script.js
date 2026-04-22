@@ -38,15 +38,21 @@ socket.on("room-created", (data) => {
 socket.on("preview-settings", (data) => {
     const card = document.querySelector('.setup-card');
     const s = data.settings;
+    
+    // Calculate what the joiner sees for their color
+    let displayColor = "RANDOM";
+    if (data.creatorColorPref === 'white') displayColor = "BLACK";
+    if (data.creatorColorPref === 'black') displayColor = "WHITE";
+
     card.innerHTML = `
         <h2 style="color: #779556">Join Room?</h2>
         <div style="text-align: left; margin-bottom: 20px; background: #1a1a1a; padding: 15px; border-radius: 8px;">
             <p><strong>Host:</strong> ${data.creatorName}</p>
             <p><strong>Time:</strong> ${s.mins}m ${s.secs}s</p>
             <p><strong>Increment:</strong> ${s.inc}s</p>
-            <p><strong>You play as:</strong> <span style="color: #779556; font-weight: bold;">${data.yourColor.toUpperCase()}</span></p>
+            <p><strong>Your Side:</strong> <span style="color: #779556; font-weight: bold;">${displayColor}</span></p>
         </div>
-        <button class="start-btn" onclick="confirmJoin('${data.yourColor}')">CONFIRM & START</button>
+        <button class="start-btn" onclick="confirmJoin()">CONFIRM & START</button>
         <button class="action-btn" style="margin-top:10px" onclick="location.reload()">Back</button>
     `;
 });
@@ -132,11 +138,10 @@ function joinRoom() {
     });
 }
 
-function confirmJoin(color) {
+function confirmJoin() {
     socket.emit("confirm-join", { 
         password: currentPassword, 
-        name: tempName,
-        color: color
+        name: tempName
     });
 }
 
