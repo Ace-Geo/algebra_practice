@@ -122,6 +122,11 @@ body {
 
 .selected { background: #f6f669 !important; }
 
+/* King in check highlight */
+.king-check {
+    background: #e66b6b !important;
+}
+
 .hint-dot { 
     width: 18px; 
     height: 18px; 
