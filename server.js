@@ -25,7 +25,6 @@ io.on("connection", (socket) => {
             creatorColor: creatorColor,
             creatorId: socket.id
         };
-        
         socket.emit("waiting-for-opponent");
     });
 
@@ -33,15 +32,8 @@ io.on("connection", (socket) => {
         const { password, name } = data;
         const settings = roomSettings[password];
         
-        if (!settings) {
-            return socket.emit("error-msg", "Room not found!");
-        }
+        if (!settings) return socket.emit("error-msg", "Room not found!");
         
-        const room = io.sockets.adapter.rooms.get(password);
-        if (room && room.size >= 2) {
-            return socket.emit("error-msg", "Room is full!");
-        }
-
         socket.emit("confirm-settings", {
             settings: settings,
             creatorName: settings.whiteName || settings.blackName
@@ -54,8 +46,8 @@ io.on("connection", (socket) => {
         if (!settings) return;
 
         socket.join(password);
-        
         const joinerColor = settings.creatorColor === 'white' ? 'black' : 'white';
+        
         if (joinerColor === 'white') settings.whiteName = name;
         else settings.blackName = name;
 
@@ -69,10 +61,9 @@ io.on("connection", (socket) => {
         io.to(settings.creatorId).emit("assign-color", settings.creatorColor);
     });
 
-    socket.on("send-move", (data) => socket.to(data.password).emit("receive-move", data));
-    socket.on("resign", (data) => socket.to(data.password).emit("opponent-resigned", { winner: data.winner }));
-    socket.on("offer-draw", (data) => socket.to(data.password).emit("draw-offered"));
-    socket.on("draw-response", (data) => socket.to(data.password).emit("draw-resolved", { accepted: data.accepted }));
+    socket.on("send-move", (data) => {
+        socket.to(data.password).emit("receive-move", data);
+    });
 
     socket.on("disconnecting", () => {
         socket.rooms.forEach(room => {
