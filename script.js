@@ -31,6 +31,7 @@ socket.on("receive-move", (data) => {
 
 socket.on("opponent-resigned", (data) => {
     isGameOver = true;
+    if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
     render(`${data.winner.toUpperCase()} WINS BY RESIGNATION`);
 });
 
@@ -41,6 +42,7 @@ socket.on("draw-offered", () => {
 socket.on("draw-resolved", (data) => {
     if (data.accepted) {
         isGameOver = true;
+        if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
         render("GAME DRAWN BY AGREEMENT");
     } else {
         showStatusMessage("Draw offer declined");
@@ -139,40 +141,43 @@ function handleActualMove(from, to, isLocal) {
     boardState[to.r][to.c] = p; boardState[from.r][from.c] = '';
     if(p==='♙'&& to.r===0) boardState[to.r][to.c] = '♕'; if(p==='♟'&& to.r===7) boardState[to.r][to.c] = '♛';
     
+    const movingTeam = currentTurn;
     currentTurn = currentTurn === 'white' ? 'black' : 'white';
     
-    // Check for Checkmate or Stalemate
     const check = isInCheck(currentTurn, boardState);
     const movesAvailable = hasLegalMoves(currentTurn);
     
-    if (check) note += '+';
-    
-    if (!movesAvailable) {
-        isGameOver = true;
-        if (check) {
-            note = note.replace('+', '#');
-            const winner = currentTurn === 'white' ? 'black' : 'white';
-            render(`CHECKMATE! ${winner.toUpperCase()} WINS`);
+    let forcedStatus = null;
+    if (check) {
+        if (!movesAvailable) {
+            note += '#';
+            isGameOver = true;
+            if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
+            forcedStatus = `CHECKMATE! ${movingTeam.toUpperCase()} WINS`;
         } else {
-            render("DRAW BY STALEMATE");
+            note += '+';
         }
+    } else if (!movesAvailable) {
+        isGameOver = true;
+        if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
+        forcedStatus = "DRAW BY STALEMATE";
     }
 
-    if(currentTurn === 'black') moveHistory.push({w: note, b: ''}); 
+    if(movingTeam === 'white') moveHistory.push({w: note, b: ''}); 
     else moveHistory[moveHistory.length-1].b = note;
 
     enPassantTarget = (p==='♙'||p==='♟') && Math.abs(from.r - to.r) === 2 ? {r:(from.r+to.r)/2, c: to.c} : null;
     selected = null;
     if (isLocal) socket.emit("send-move", { password: currentPassword, move: { from, to }, whiteTime, blackTime });
-    if (!isGameOver) render();
+    render(forcedStatus);
 }
 
-// --- NEW UI ACTIONS (No Popups) ---
 function resignGame() {
     if (isGameOver) return;
     const winner = myColor === 'white' ? 'black' : 'white';
     socket.emit("resign", { password: currentPassword, winner: winner });
     isGameOver = true;
+    if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
     render(`${winner.toUpperCase()} WINS BY RESIGNATION`);
 }
 
@@ -201,6 +206,7 @@ function respondToDraw(accepted) {
     document.getElementById('notification-area').innerHTML = '';
     if (accepted) {
         isGameOver = true;
+        if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
         render("GAME DRAWN BY AGREEMENT");
     }
 }
@@ -219,7 +225,10 @@ function render(forcedStatus) {
     layout.replaceChildren();
 
     const check = isInCheck(currentTurn, boardState);
-    const sTxt = forcedStatus || `${currentTurn.toUpperCase()}'S TURN ${check?'(CHECK!)':''}`;
+    let sTxt = forcedStatus;
+    if (!sTxt) {
+        sTxt = `${currentTurn.toUpperCase()}'S TURN ${check ? '(CHECK!)' : ''}`;
+    }
 
     const gameArea = document.createElement('div');
     gameArea.id = 'game-area';
@@ -249,7 +258,6 @@ function render(forcedStatus) {
             const piece = boardState[r][c];
             sq.className = `square ${(r+c)%2===0 ? 'white-sq' : 'black-sq'}`;
             
-            // Highlight King if in check
             if (check && (piece === (currentTurn === 'white' ? '♔' : '♚'))) {
                 sq.classList.add('king-check');
             }
@@ -311,7 +319,11 @@ function initGameState() {
             if (isGameOver) return;
             if (currentTurn === 'white') whiteTime--; else blackTime--;
             updateTimerDisplay();
-            if (whiteTime <= 0 || blackTime <= 0) { isGameOver = true; render(whiteTime <= 0 ? "BLACK WINS ON TIME" : "WHITE WINS ON TIME"); }
+            if (whiteTime <= 0 || blackTime <= 0) { 
+                isGameOver = true; 
+                clearInterval(window.chessIntervalInstance);
+                render(whiteTime <= 0 ? "BLACK WINS ON TIME" : "WHITE WINS ON TIME"); 
+            }
         }, 1000);
     }
     render();
@@ -319,8 +331,8 @@ function initGameState() {
 
 function updateTimerDisplay() {
     const wT = document.getElementById('timer-white'), bT = document.getElementById('timer-black');
-    if (wT) { wT.textContent = formatTime(whiteTime); wT.className = `timer ${currentTurn === 'white' ? 'active' : ''}`; }
-    if (bT) { bT.textContent = formatTime(blackTime); bT.className = `timer ${currentTurn === 'black' ? 'active' : ''}`; }
+    if (wT) { wT.textContent = formatTime(whiteTime); wT.className = `timer ${currentTurn === 'white' && !isGameOver ? 'active' : ''}`; }
+    if (bT) { bT.textContent = formatTime(blackTime); bT.className = `timer ${currentTurn === 'black' && !isGameOver ? 'active' : ''}`; }
 }
 function formatTime(s) { if(isInfinite) return "∞"; const dS=Math.max(0,s); return `${Math.floor(dS/60)}:${(dS%60).toString().padStart(2,'0')}`; }
 
