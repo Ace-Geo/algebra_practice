@@ -10,7 +10,7 @@ body {
     overflow: hidden; 
 }
 
-/* Lobby / Setup */
+/* Lobby / Setup - Untouched */
 #setup-overlay { 
     position: fixed; 
     inset: 0; 
@@ -20,7 +20,6 @@ body {
     justify-content: center; 
     z-index: 100; 
 }
-
 .setup-card { 
     background: #262421; 
     padding: 2.5rem; 
@@ -29,7 +28,6 @@ body {
     box-shadow: 0 15px 35px rgba(0,0,0,0.5); 
     text-align: center; 
 }
-
 .tabs { display: flex; margin-bottom: 20px; border-bottom: 1px solid #444; }
 .tabs button { 
     flex: 1; padding: 12px; background: none; border: none; 
@@ -37,90 +35,72 @@ body {
     border-bottom: 3px solid transparent; transition: 0.2s; 
 }
 .tabs button.active { color: #779556; border-bottom-color: #779556; }
-
 .input-group { margin-bottom: 1.2rem; text-align: left; }
-.input-group label { 
-    display: block; font-size: 11px; margin-bottom: 6px; 
-    color: #bababa; text-transform: uppercase; letter-spacing: 1px; 
-}
-.input-group input, select { 
-    width: 100%; padding: 10px; background: #1a1a1a; border: 1px solid #444; 
-    color: #fff; border-radius: 6px; box-sizing: border-box; outline: none; 
-}
-
-.start-btn { 
-    width: 100%; padding: 12px; background: #779556; border: none; 
-    color: #fff; font-weight: bold; cursor: pointer; border-radius: 6px; 
-    font-size: 16px; margin-top: 10px; 
-}
-.action-btn { 
-    background: #3c3a37; border: none; color: #bababa; 
-    padding: 10px; border-radius: 4px; cursor: pointer; font-size: 12px; 
-}
-
-/* Spinner */
-.loader { 
-    border: 4px solid #3c3a37; border-top: 4px solid #779556; 
-    border-radius: 50%; width: 30px; height: 30px; 
-    animation: spin 1s linear infinite; margin: 20px auto; 
-}
-@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+.input-group label { display: block; font-size: 11px; margin-bottom: 6px; color: #bababa; text-transform: uppercase; letter-spacing: 1px; }
+.input-group input, select { width: 100%; padding: 10px; background: #1a1a1a; border: 1px solid #444; color: #fff; border-radius: 6px; box-sizing: border-box; outline: none; }
+.start-btn { width: 100%; padding: 12px; background: #779556; border: none; color: #fff; font-weight: bold; cursor: pointer; border-radius: 6px; font-size: 16px; margin-top: 10px; }
+.action-btn { background: #3c3a37; border: none; color: #bababa; padding: 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
 
 /* Main Game Layout */
 #main-layout { 
     display: flex; 
     gap: 30px; 
     align-items: flex-start; 
-    justify-content: center;
-    max-width: 1200px;
 }
 
 #game-area { 
     display: flex; 
     flex-direction: column; 
-    width: 520px; /* Adjust this value to scale the whole board */
+    width: 536px; /* 512px board + 24px total padding */
 }
 
-/* Board & Border */
 #board-container {
-    background: #262421; /* The dark grey border */
+    background: #262421; /* Dark grey border */
     padding: 12px; 
     box-sizing: border-box;
 }
 
 #board { 
     display: grid; 
-    grid-template-columns: repeat(8, 1fr); 
-    grid-template-rows: repeat(8, 1fr); 
-    width: 100%; 
-    aspect-ratio: 1 / 1; 
+    grid-template-columns: repeat(8, 64px); 
+    grid-template-rows: repeat(8, 64px); 
+    width: 512px; 
+    height: 512px; 
 }
 
 .square { 
-    display: flex; justify-content: center; align-items: center; 
-    position: relative; cursor: pointer; 
+    width: 64px;
+    height: 64px;
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+    position: relative; 
+    cursor: pointer; 
 }
+
 .white-sq { background: #eeeed2; }
 .black-sq { background: #779556; }
 .selected { background: #f6f669 !important; }
 .king-check { background: #e66b6b !important; }
 
-/* Pieces */
 .piece { 
-    font-size: clamp(24px, 6vw, 48px); 
-    user-select: none; z-index: 5; 
+    font-size: 50px; 
+    user-select: none; 
+    z-index: 5; 
+    line-height: 1;
 }
 .w-piece { color: #fff; text-shadow: 1px 1px 2px #000; }
 .b-piece { color: #000; }
 
-/* UI Panels */
 .player-bar { 
-    display: flex; justify-content: space-between; align-items: center; 
-    background: #262421; padding: 12px 15px; width: 100%; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    background: #262421; 
+    padding: 10px 15px; 
+    width: 100%; 
     box-sizing: border-box; 
 }
-#game-area > .player-bar:first-child { border-radius: 8px 8px 0 0; }
-#game-area > .player-bar:last-child { border-radius: 0 0 8px 8px; }
 
 .timer { 
     font-family: monospace; font-size: 22px; background: #1a1a1a; 
@@ -129,14 +109,75 @@ body {
 }
 .timer.active { background: #fff; color: #000; font-weight: bold; }
 
+/* Side Panel & History */
 #side-panel { 
-    width: 260px; background: #262421; padding: 20px; 
-    border-radius: 8px; display: flex; flex-direction: column; gap: 15px; 
+    width: 260px; 
+    background: #262421; 
+    padding: 20px; 
+    border-radius: 8px; 
+    display: flex; 
+    flex-direction: column; 
+    gap: 15px; 
     height: 600px; 
+    box-sizing: border-box;
 }
 
-.hint-dot { width: 25%; height: 25%; background: rgba(0,0,0,0.15); border-radius: 50%; }
+#status-box { 
+    background: #312e2b; 
+    padding: 12px; 
+    border-radius: 6px; 
+    text-align: center; 
+    border: 1px solid #444; 
+}
+
+#status-text { 
+    font-weight: bold; 
+    color: #779556; 
+    text-transform: uppercase; 
+    font-size: 13px;
+}
+
+.btn-row { 
+    display: grid; 
+    grid-template-columns: 1fr 1fr; 
+    gap: 10px; 
+}
+
+#history-container { 
+    flex-grow: 1; 
+    overflow-y: auto; 
+    background: #1a1a1a; 
+    border-radius: 6px; 
+    padding: 10px; 
+    border: 1px solid #333;
+}
+
+.history-row { 
+    display: grid; 
+    grid-template-columns: 35px 1fr 1fr; 
+    font-family: monospace;
+    font-size: 14px; 
+    padding: 6px 0; 
+    border-bottom: 1px solid #262421; 
+}
+
+.move-num { color: #666; }
+
+.hint-dot { width: 16px; height: 16px; background: rgba(0,0,0,0.15); border-radius: 50%; }
 .hint-capture { 
-    width: 80%; height: 80%; border: 6px solid rgba(0,0,0,0.15); 
+    width: 54px; height: 54px; border: 5px solid rgba(0,0,0,0.15); 
     border-radius: 50%; position: absolute; 
 }
+
+.draw-modal { 
+    background: #4b4845; 
+    border-left: 4px solid #779556; 
+    padding: 12px; 
+    border-radius: 4px; 
+    font-size: 13px; 
+    margin-bottom: 10px;
+}
+.modal-btns { display: flex; gap: 8px; margin-top: 10px; }
+.modal-btns button { flex: 1; padding: 8px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 11px; }
+.accept-btn { background: #779556; color: #fff; }
+.decline-btn { background: #312e2b; color: #bababa; }
