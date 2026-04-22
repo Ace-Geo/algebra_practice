@@ -96,11 +96,11 @@ io.on("connection", (socket) => {
         socket.to(data.password).emit("draw-offered");
     });
 
-    socket.on("draw-resolved", (data) => {
-        socket.to(data.password).emit("draw-resolved", { accepted: data.accepted });
+    // Broadcast the result to the entire room (including the sender)
+    socket.on("draw-response", (data) => {
+        io.in(data.password).emit("draw-resolved", { accepted: data.accepted });
     });
 
-    // --- REMATCH HANDSHAKE ---
     socket.on("rematch-request", (data) => {
         const pass = data.password;
         if (!roomRematchStates[pass]) roomRematchStates[pass] = new Set();
