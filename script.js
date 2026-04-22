@@ -99,6 +99,22 @@ function moveIsLegal(fR, fC, tR, tC, p, team) {
     return !isInCheck(team, temp);
 }
 
+function hasLegalMoves(team) {
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            const p = boardState[r][c];
+            if (p !== '' && getTeam(p) === team) {
+                for (let tr = 0; tr < 8; tr++) {
+                    for (let tc = 0; tc < 8; tc++) {
+                        if (moveIsLegal(r, c, tr, tc, p, team)) return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
 function getNotation(fR, fC, tR, tC, piece, target, isEP, castle) {
     if (castle) return castle === 'short' ? 'O-O' : 'O-O-O';
     const files = ['a','b','c','d','e','f','g','h'], rows = ['8','7','6','5','4','3','2','1'];
@@ -122,13 +138,33 @@ function handleActualMove(from, to, isLocal) {
     hasMoved[`${from.r},${from.c}`] = 1; 
     boardState[to.r][to.c] = p; boardState[from.r][from.c] = '';
     if(p==='♙'&& to.r===0) boardState[to.r][to.c] = '♕'; if(p==='♟'&& to.r===7) boardState[to.r][to.c] = '♛';
-    if(isInCheck(currentTurn==='white'?'black':'white', boardState)) note += '+';
-    if(currentTurn === 'white') moveHistory.push({w: note, b: ''}); else moveHistory[moveHistory.length-1].b = note;
-    enPassantTarget = (p==='♙'||p==='♟') && Math.abs(from.r - to.r) === 2 ? {r:(from.r+to.r)/2, c: to.c} : null;
+    
     currentTurn = currentTurn === 'white' ? 'black' : 'white';
+    
+    // Check for Checkmate or Stalemate
+    const check = isInCheck(currentTurn, boardState);
+    const movesAvailable = hasLegalMoves(currentTurn);
+    
+    if (check) note += '+';
+    
+    if (!movesAvailable) {
+        isGameOver = true;
+        if (check) {
+            note = note.replace('+', '#');
+            const winner = currentTurn === 'white' ? 'black' : 'white';
+            render(`CHECKMATE! ${winner.toUpperCase()} WINS`);
+        } else {
+            render("DRAW BY STALEMATE");
+        }
+    }
+
+    if(currentTurn === 'black') moveHistory.push({w: note, b: ''}); 
+    else moveHistory[moveHistory.length-1].b = note;
+
+    enPassantTarget = (p==='♙'||p==='♟') && Math.abs(from.r - to.r) === 2 ? {r:(from.r+to.r)/2, c: to.c} : null;
     selected = null;
     if (isLocal) socket.emit("send-move", { password: currentPassword, move: { from, to }, whiteTime, blackTime });
-    render();
+    if (!isGameOver) render();
 }
 
 // --- NEW UI ACTIONS (No Popups) ---
@@ -212,6 +248,12 @@ function render(forcedStatus) {
             const sq = document.createElement('div');
             const piece = boardState[r][c];
             sq.className = `square ${(r+c)%2===0 ? 'white-sq' : 'black-sq'}`;
+            
+            // Highlight King if in check
+            if (check && (piece === (currentTurn === 'white' ? '♔' : '♚'))) {
+                sq.classList.add('king-check');
+            }
+
             if(selected?.r===r && selected?.c===c) sq.classList.add('selected');
             if(hints.some(h => h.r===r && h.c===c)) {
                 const dot = document.createElement('div');
