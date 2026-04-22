@@ -4,15 +4,12 @@ let whiteName = "White", blackName = "Black";
 let boardState, currentTurn, hasMoved, enPassantTarget, selected, isGameOver, isInfinite;
 let whiteTime, blackTime, increment, moveHistory = [];
 let rematchRequested = false;
+let gameSettings = null; // Store settings for resets
 
 // --- 1. SOCKET LISTENERS ---
 socket.on("player-assignment", (data) => {
     myColor = data.color;
-    const s = data.settings;
-    whiteTime = (parseInt(s.mins) * 60) + parseInt(s.secs);
-    blackTime = whiteTime;
-    increment = parseInt(s.inc) || 0;
-    isInfinite = (whiteTime === 0);
+    gameSettings = data.settings; // Save settings globally
     
     if (myColor === 'white') {
         whiteName = tempName || "White";
@@ -76,6 +73,12 @@ socket.on("rematch-offered", () => {
 
 socket.on("rematch-start", () => {
     rematchRequested = false;
+    // Swap colors for the rematch
+    myColor = (myColor === 'white' ? 'black' : 'white');
+    let oldWhite = whiteName;
+    whiteName = blackName;
+    blackName = oldWhite;
+
     document.getElementById('game-over-overlay')?.remove();
     document.getElementById('reopen-results-btn')?.remove();
     initGameState();
@@ -306,12 +309,9 @@ function resignGame() {
     if (isGameOver) return;
     const winner = myColor === 'white' ? 'black' : 'white';
     const status = `${winner.toUpperCase()} WINS BY RESIGNATION`;
-    
     isGameOver = true;
     if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
-    
     socket.emit("resign", { password: currentPassword, winner: winner });
-    
     showResultModal(status);
     render(status);
 }
@@ -329,8 +329,6 @@ function showDrawOffer() {
 }
 
 function respondToDraw(accepted) {
-    // Instead of locking locally, we tell the server. 
-    // The server then broadcasts "draw-resolved" to EVERYONE including us.
     socket.emit("draw-response", { password: currentPassword, accepted: accepted });
     document.getElementById('notification-area').innerHTML = '';
 }
@@ -374,7 +372,6 @@ function requestRematch() {
 function closeModal() {
     const overlay = document.getElementById('game-over-overlay');
     if (overlay) overlay.style.display = 'none';
-    
     if (!document.getElementById('reopen-results-btn')) {
         const btn = document.createElement('button');
         btn.id = 'reopen-results-btn';
@@ -419,9 +416,7 @@ function render(forcedStatus) {
             const sq = document.createElement('div');
             const piece = boardState[r][c];
             sq.className = `square ${(r+c)%2===0 ? 'white-sq' : 'black-sq'}`;
-            
             if (check && piece === (currentTurn === 'white' ? '♔' : '♚')) sq.classList.add('king-check');
-            
             if(selected?.r===r && selected?.c===c) sq.classList.add('selected');
             if(hints.some(h => h.r===r && h.c===c)) {
                 const dot = document.createElement('div');
@@ -467,8 +462,23 @@ function render(forcedStatus) {
 }
 
 function initGameState() {
+    // RESET BOARD & LOGIC
     boardState = [['♜','♞','♝','♛','♚','♝','♞','♜'],['♟','♟','♟','♟','♟','♟','♟','♟'],['','','','','','','',''],['','','','','','','',''],['','','','','','','',''],['','','','','','','',''],['♙','♙','♙','♙','♙','♙','♙','♙'],['♖','♘','♗','♕','♔','♗','♘','♖']];
-    currentTurn = 'white'; hasMoved = {}; moveHistory = []; isGameOver = false; selected = null; rematchRequested = false;
+    currentTurn = 'white'; 
+    hasMoved = {}; 
+    moveHistory = []; 
+    isGameOver = false; 
+    selected = null; 
+    rematchRequested = false;
+
+    // RESET CLOCKS BASED ON ORIGINAL SETTINGS
+    if (gameSettings) {
+        whiteTime = (parseInt(gameSettings.mins) * 60) + parseInt(gameSettings.secs);
+        blackTime = whiteTime;
+        increment = parseInt(gameSettings.inc) || 0;
+        isInfinite = (whiteTime === 0);
+    }
+
     if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
     if (!isInfinite) {
         window.chessIntervalInstance = setInterval(() => {
