@@ -4,7 +4,7 @@ let whiteName = "White", blackName = "Black";
 let boardState, currentTurn, hasMoved, enPassantTarget, selected, isGameOver, isInfinite;
 let whiteTime, blackTime, increment, moveHistory = [];
 
-// --- 1. SOCKET LISTENERS (Untouched) ---
+// --- 1. SOCKET LISTENERS ---
 socket.on("player-assignment", (data) => {
     myColor = data.color;
     const s = data.settings;
@@ -46,7 +46,7 @@ socket.on("receive-move", (data) => {
 socket.on("opponent-resigned", (data) => {
     isGameOver = true;
     if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
-    render(`${data.winner.toUpperCase()()} WINS BY RESIGNATION`);
+    render(`${data.winner.toUpperCase()} WINS BY RESIGNATION`);
 });
 
 socket.on("draw-offered", () => showDrawOffer());
@@ -109,7 +109,7 @@ function joinRoom() {
 
 function confirmJoin() { socket.emit("confirm-join", { password: currentPassword, name: tempName }); }
 
-// --- 3. CHESS MECHANICS ---
+// --- 3. CHESS MECHANICS (FIXED DETECTION) ---
 const isWhite = (c) => ['♖', '♘', '♗', '♕', '♔', '♙'].includes(c);
 const getTeam = (c) => c === '' ? null : (isWhite(c) ? 'white' : 'black');
 const getPieceNotation = (p) => {
@@ -158,13 +158,18 @@ function isInCheck(team, b) {
     let kr = -1, kc = -1;
     for(let r=0; r<8; r++) for(let c=0; c<8; c++) if(b[r][c]===k){kr=r;kc=c;}
     if(kr === -1) return false;
-    for(let i=0; i<8; i++) for(let j=0; j<8; j++) if(b[i][j]!=='' && getTeam(b[i][j])===atkTeam && validateMoveMechanics(i,j,kr,kc,b[i][j],b[kr][kc],b)) return true;
+    for(let i=0; i<8; i++) for(let j=0; j<8; j++) {
+        if(b[i][j]!=='' && getTeam(b[i][j])===atkTeam) {
+            if(validateMoveMechanics(i,j,kr,kc,b[i][j],b[kr][kc],b)) return true;
+        }
+    }
     return false;
 }
 
 function moveIsLegal(fR, fC, tR, tC, p, team) {
     if (!validateMoveMechanics(fR, fC, tR, tC, p, boardState[tR][tC], boardState)) return false;
-    const temp = boardState.map(r => [...r]); temp[tR][tC] = p; temp[fR][fC] = '';
+    const temp = boardState.map(r => [...r]);
+    temp[tR][tC] = p; temp[fR][fC] = '';
     if ((p==='♙'||p==='♟') && enPassantTarget?.r === tR && enPassantTarget?.c === tC) temp[fR][tC] = '';
     return !isInCheck(team, temp);
 }
@@ -220,24 +225,24 @@ function handleActualMove(from, to, isLocal) {
         else blackTime += increment;
     }
 
-    // Switch Turn
+    // Switch Turn BEFORE detection
     currentTurn = opponentTeam; 
 
-    // Win Detection
-    const opponentInCheck = isInCheck(opponentTeam, boardState);
-    const opponentHasMoves = hasLegalMoves(opponentTeam);
+    // Win Detection (Critical Fix)
+    const inCheck = isInCheck(currentTurn, boardState);
+    const canMove = hasLegalMoves(currentTurn);
     let forcedStatus = null;
 
-    if (!opponentHasMoves) {
+    if (!canMove) {
         isGameOver = true;
         if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
-        if (opponentInCheck) {
+        if (inCheck) {
             note += '#';
             forcedStatus = `CHECKMATE! ${movingTeam.toUpperCase()} WINS`;
         } else {
             forcedStatus = "DRAW BY STALEMATE";
         }
-    } else if (opponentInCheck) {
+    } else if (inCheck) {
         note += '+';
     }
 
