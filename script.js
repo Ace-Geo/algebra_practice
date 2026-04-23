@@ -187,7 +187,6 @@ function sendChatMessage() {
     input.value = '';
 }
 
-// Helper for showing help info
 const COMMANDS_HELP = {
     "pause": { desc: "Pauses or resumes the game clocks.", usage: "/pause <true/false>" },
     "time": { desc: "Sets the remaining time for a specific player.", usage: "/time <white/black> <minutes> <seconds>" },
@@ -502,6 +501,13 @@ function render(forcedStatus) {
     });
     layout.appendChild(sidePanel);
     if (isChatFocused) { newInp.focus(); newInp.setSelectionRange(cursorPos, cursorPos); }
+
+    // FIXED: Ensure chat scrolled to bottom after re-render
+    const msgCont = document.getElementById('chat-messages');
+    if (msgCont) {
+        msgCont.scrollTop = msgCont.scrollHeight;
+    }
+    
     updateTimerDisplay();
 }
 
