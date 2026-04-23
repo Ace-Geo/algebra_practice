@@ -88,6 +88,10 @@ io.on("connection", (socket) => {
         });
     });
 
+    socket.on("admin-pause-toggle", (data) => {
+        io.in(data.password).emit("pause-state-updated", { isPaused: data.isPaused });
+    });
+
     socket.on("resign", (data) => {
         socket.to(data.password).emit("opponent-resigned", { winner: data.winner });
     });
