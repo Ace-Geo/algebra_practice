@@ -116,6 +116,7 @@ io.on("connection", (socket) => {
         }
     });
 
+    // NEW: Handle cancellation
     socket.on("cancel-rematch", (data) => {
         const pass = data.password;
         if (roomRematchStates[pass]) {
