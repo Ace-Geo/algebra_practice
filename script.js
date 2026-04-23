@@ -142,37 +142,37 @@ function sendChatMessage() {
     input.value = '';
 }
 
-// --- HARD CODED COMMANDS ---
+// --- HARD CODED ADMIN COMMANDS ---
 function handleAdminCommand(cmd) {
     const args = cmd.split(' ');
     const baseCmd = args[0].toLowerCase().substring(1);
 
-    // CASE: HELP
+    // /HELP logic
     if (baseCmd === "help") {
         const sub = args[1]?.toLowerCase();
 
         if (!sub) {
-            appendChatMessage("Console", "Usage: /help <command name>", true);
+            appendChatMessage("Console", "--- Available Commands ---", true);
+            appendChatMessage("Console", "/help - Lists all commands", true);
+            appendChatMessage("Console", "/pause - Pauses or Resumes the game clocks", true);
+            appendChatMessage("Console", "/time - Manually sets a player's remaining time", true);
             return;
         }
-
-        if (sub === "time") {
-            appendChatMessage("Console", "Usage: /time <colour> <minutes> <seconds>", true);
-            return;
-        }
-
         if (sub === "pause") {
             appendChatMessage("Console", "Usage: /pause <true/false>", true);
             return;
         }
-
+        if (sub === "time") {
+            appendChatMessage("Console", "Usage: /time <colour> <minutes> <seconds>", true);
+            return;
+        }
         if (sub === "help") {
-            appendChatMessage("Console", "Usage: /help <command name>", true);
+            appendChatMessage("Console", "Usage: /help <command>", true);
             return;
         }
     }
 
-    // CASE: PAUSE
+    // /PAUSE logic
     if (baseCmd === "pause") {
         const val = args[1]?.toLowerCase();
         if (val === "true") {
@@ -185,7 +185,7 @@ function handleAdminCommand(cmd) {
         return;
     }
 
-    // CASE: TIME
+    // /TIME logic
     if (baseCmd === "time") {
         const color = args[1]?.toLowerCase();
         const mins = parseInt(args[2]);
@@ -217,7 +217,7 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
-// --- CHESS ENGINE ---
+// --- CHESS ENGINE LOGIC ---
 const isWhite = (piece) => ['♖', '♘', '♗', '♕', '♔', '♙'].includes(piece);
 const getTeam = (piece) => piece === '' ? null : (isWhite(piece) ? 'white' : 'black');
 
