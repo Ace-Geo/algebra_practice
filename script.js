@@ -142,64 +142,83 @@ function sendChatMessage() {
     input.value = '';
 }
 
-// --- UPDATED INDIVIDUAL HARD-CODED COMMANDS ---
+// --- FULLY HARD-CODED INDIVIDUAL COMMAND LOGIC ---
 function handleAdminCommand(cmd) {
     const args = cmd.split(' ');
     const baseCmd = args[0].toLowerCase().substring(1);
 
-    switch (baseCmd) {
-        case "help":
-            const sub = args[1]?.toLowerCase();
-            
-            if (!sub) {
-                // PART 1: Just the list and short descriptions
-                appendChatMessage("Console", "--- Admin Commands ---", true);
-                appendChatMessage("Console", "/help - Shows this list.", true);
-                appendChatMessage("Console", "/pause - Stops or starts the game clocks.", true);
-                appendChatMessage("Console", "/time - Changes a player's remaining time.", true);
-                appendChatMessage("Console", "Type '/help <command>' for arguments.", true);
-            } 
-            else if (sub === "time") {
-                // PART 2: Specific argument details
-                appendChatMessage("Console", "Usage: /time <white/black> <mins> <secs>", true);
-            } 
-            else if (sub === "pause") {
-                appendChatMessage("Console", "Usage: /pause <true/false>", true);
-            } 
-            else if (sub === "help") {
-                appendChatMessage("Console", "Usage: /help <command_name>", true);
-            }
-            break;
+    // CASE: /HELP
+    if (baseCmd === "help") {
+        const targetHelp = args[1]?.toLowerCase();
 
-        case "pause":
-            const pVal = args[1]?.toLowerCase();
-            if (pVal === "true" || pVal === "false") {
-                socket.emit("admin-pause-toggle", { password: currentPassword, isPaused: pVal === "true" });
-            } else {
-                appendChatMessage("Console", "Error: Missing true/false.", true);
-                appendChatMessage("Console", "Usage: /pause <true/false>", true);
-            }
-            break;
+        if (!targetHelp) {
+            appendChatMessage("Console", "--- List of Admin Commands ---", true);
+            appendChatMessage("Console", "/help - Shows all available commands and their purpose.", true);
+            appendChatMessage("Console", "/pause - Used to freeze or unfreeze the game clocks.", true);
+            appendChatMessage("Console", "/time - Used to manually change the remaining time for a player.", true);
+            appendChatMessage("Console", "Usage: Type /help <command name> to see arguments.", true);
+            return;
+        }
 
-        case "time":
-            const target = args[1]?.toLowerCase();
-            const mins = parseInt(args[2]);
-            const secs = parseInt(args[3]);
-            if ((target === 'white' || target === 'black') && !isNaN(mins) && !isNaN(secs)) {
-                socket.emit("admin-set-time", {
-                    password: currentPassword,
-                    color: target,
-                    newTime: (mins * 60) + secs
-                });
-            } else {
-                appendChatMessage("Console", "Error: Invalid or missing arguments.", true);
-                appendChatMessage("Console", "Usage: /time <white/black> <mins> <secs>", true);
-            }
-            break;
+        if (targetHelp === "time") {
+            appendChatMessage("Console", "Command: /time", true);
+            appendChatMessage("Console", "Arguments needed: <colour> <minutes> <seconds>", true);
+            appendChatMessage("Console", "Example: /time white 5 00", true);
+            return;
+        }
 
-        default:
-            appendChatMessage("Console", `Unknown: /${baseCmd}. Type /help.`, true);
+        if (targetHelp === "pause") {
+            appendChatMessage("Console", "Command: /pause", true);
+            appendChatMessage("Console", "Arguments needed: <true/false>", true);
+            appendChatMessage("Console", "Example: /pause true", true);
+            return;
+        }
+
+        if (targetHelp === "help") {
+            appendChatMessage("Console", "Command: /help", true);
+            appendChatMessage("Console", "Arguments needed: (Optional) <command name>", true);
+            return;
+        }
+
+        appendChatMessage("Console", `No help entry found for: ${targetHelp}`, true);
+        return;
     }
+
+    // CASE: /PAUSE
+    if (baseCmd === "pause") {
+        const state = args[1]?.toLowerCase();
+        if (state === "true") {
+            socket.emit("admin-pause-toggle", { password: currentPassword, isPaused: true });
+        } else if (state === "false") {
+            socket.emit("admin-pause-toggle", { password: currentPassword, isPaused: false });
+        } else {
+            appendChatMessage("Console", "Error: You must specify true or false.", true);
+            appendChatMessage("Console", "Required arguments: /pause <true/false>", true);
+        }
+        return;
+    }
+
+    // CASE: /TIME
+    if (baseCmd === "time") {
+        const color = args[1]?.toLowerCase();
+        const mins = parseInt(args[2]);
+        const secs = parseInt(args[3]);
+
+        if ((color === 'white' || color === 'black') && !isNaN(mins) && !isNaN(secs)) {
+            socket.emit("admin-set-time", {
+                password: currentPassword,
+                color: color,
+                newTime: (mins * 60) + secs
+            });
+        } else {
+            appendChatMessage("Console", "Error: Missing arguments for time.", true);
+            appendChatMessage("Console", "Required arguments: /time <colour> <minutes> <seconds>", true);
+        }
+        return;
+    }
+
+    // DEFAULT
+    appendChatMessage("Console", `Unknown command: /${baseCmd}. Type /help for a list.`, true);
 }
 
 window.addEventListener('keydown', (e) => {
@@ -213,7 +232,7 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
-// (Rest of the standard chess functions - unchanged logic)
+// --- CHESS ENGINE LOGIC ---
 const isWhite = (piece) => ['♖', '♘', '♗', '♕', '♔', '♙'].includes(piece);
 const getTeam = (piece) => piece === '' ? null : (isWhite(piece) ? 'white' : 'black');
 
