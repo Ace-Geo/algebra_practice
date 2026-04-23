@@ -198,7 +198,6 @@ function sendChatMessage() {
     input.value = '';
 }
 
-// Helper for showing help info
 const COMMANDS_HELP = {
     "pause": { desc: "Pauses or resumes the game clocks.", usage: "/pause <true/false>" },
     "time": { desc: "Sets the remaining time for a specific player.", usage: "/time <white/black> <minutes> <seconds>" },
@@ -468,6 +467,7 @@ function render(forcedStatus) {
     const cursorPos = oldInput ? oldInput.selectionStart : 0;
     const currentTypingValue = oldInput ? oldInput.value : "";
     const existingMessagesHTML = document.getElementById('chat-messages')?.innerHTML || "";
+    
     layout.innerHTML = '';
     const chatPanel = document.createElement('div');
     chatPanel.id = 'chat-panel';
@@ -479,6 +479,11 @@ function render(forcedStatus) {
             <button id="chat-send-btn">Send</button>
         </div>
     `;
+    
+    // --- KEEP CHAT SCROLLED TO BOTTOM ---
+    const msgContainer = chatPanel.querySelector('#chat-messages');
+    msgContainer.scrollTop = msgContainer.scrollHeight;
+
     const newInp = chatPanel.querySelector('#chat-input');
     newInp.value = currentTypingValue;
     newInp.addEventListener('keydown', (e) => e.stopPropagation());
@@ -517,8 +522,6 @@ function render(forcedStatus) {
             }
             sq.onclick = () => {
                 if (isGameOver || currentTurn !== myColor) return;
-                
-                // --- SELECTION LOGIC ---
                 if (selected) {
                     if (hints.some(h => h.r === r && h.c === c)) {
                         handleActualMove(selected, { r, c }, true);
