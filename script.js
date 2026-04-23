@@ -4,12 +4,12 @@ let whiteName = "White", blackName = "Black";
 let boardState, currentTurn, hasMoved, enPassantTarget, selected, isGameOver, isInfinite;
 let whiteTime, blackTime, increment, moveHistory = [];
 let rematchRequested = false;
-let gameSettings = null; // Store settings for resets
+let gameSettings = null; 
 
 // --- 1. SOCKET LISTENERS ---
 socket.on("player-assignment", (data) => {
     myColor = data.color;
-    gameSettings = data.settings; // Save settings globally
+    gameSettings = data.settings;
     
     if (myColor === 'white') {
         whiteName = tempName || "White";
@@ -21,6 +21,7 @@ socket.on("player-assignment", (data) => {
     
     document.getElementById('setup-overlay')?.remove();
     initGameState();
+    appendChatMessage("System", `Game started! You are ${myColor.toUpperCase()}.`, true);
 });
 
 socket.on("room-created", (data) => {
@@ -39,6 +40,10 @@ socket.on("receive-move", (data) => {
     whiteTime = data.whiteTime;
     blackTime = data.blackTime;
     handleActualMove(data.move.from, data.move.to, false);
+});
+
+socket.on("receive-chat", (data) => {
+    appendChatMessage(data.sender, data.message);
 });
 
 socket.on("opponent-resigned", (data) => {
@@ -73,7 +78,6 @@ socket.on("rematch-offered", () => {
 
 socket.on("rematch-start", () => {
     rematchRequested = false;
-    // Swap colors for the rematch
     myColor = (myColor === 'white' ? 'black' : 'white');
     let oldWhite = whiteName;
     whiteName = blackName;
@@ -82,11 +86,12 @@ socket.on("rematch-start", () => {
     document.getElementById('game-over-overlay')?.remove();
     document.getElementById('reopen-results-btn')?.remove();
     initGameState();
+    appendChatMessage("System", "Rematch started! Colors swapped.", true);
 });
 
 socket.on("error-msg", (msg) => alert(msg));
 
-// --- 2. LOBBY UI ---
+// --- 2. LOBBY & CHAT UI ---
 function showSetup() {
     const overlay = document.createElement('div');
     overlay.id = 'setup-overlay';
@@ -131,6 +136,27 @@ function joinRoom() {
 }
 
 function confirmJoin() { socket.emit("confirm-join", { password: currentPassword, name: tempName }); }
+
+function appendChatMessage(sender, message, isSystem = false) {
+    const msgContainer = document.getElementById('chat-messages');
+    if (!msgContainer) return;
+    const div = document.createElement('div');
+    div.className = isSystem ? 'chat-msg system' : 'chat-msg';
+    div.innerHTML = isSystem ? message : `<b>${sender}:</b> ${message}`;
+    msgContainer.appendChild(div);
+    msgContainer.scrollTop = msgContainer.scrollHeight;
+}
+
+function sendChatMessage() {
+    const input = document.getElementById('chat-input');
+    const msg = input.value.trim();
+    if (msg && currentPassword) {
+        const myName = (myColor === 'white' ? whiteName : blackName);
+        socket.emit("send-chat", { password: currentPassword, message: msg, senderName: myName });
+        appendChatMessage("You", msg);
+        input.value = '';
+    }
+}
 
 // --- 3. CORE CHESS LOGIC ---
 const isWhite = (c) => ['♖', '♘', '♗', '♕', '♔', '♙'].includes(c);
@@ -340,7 +366,6 @@ function showStatusMessage(msg) {
     setTimeout(() => { area.innerHTML = ''; }, 3000);
 }
 
-// --- GAME OVER MODAL HANDLERS ---
 function showResultModal(txt) {
     document.getElementById('game-over-overlay')?.remove();
     const overlay = document.createElement('div');
@@ -387,8 +412,30 @@ function closeModal() {
 function render(forcedStatus) {
     const layout = document.getElementById('main-layout');
     if (!layout) return;
+
+    // Cache chat and input so they don't reset when the board re-renders
+    const oldChatHTML = document.getElementById('chat-messages')?.innerHTML || "";
+    const oldChatInput = document.getElementById('chat-input')?.value || "";
+
     layout.replaceChildren();
 
+    // COLUMN 1: CHAT
+    const chatPanel = document.createElement('div');
+    chatPanel.id = 'chat-panel';
+    chatPanel.innerHTML = `
+        <div id="chat-header">GAME CHAT</div>
+        <div id="chat-messages">${oldChatHTML}</div>
+        <div id="chat-input-area">
+            <input type="text" id="chat-input" placeholder="Say hello..." autocomplete="off">
+            <button id="chat-send-btn">Send</button>
+        </div>`;
+    
+    chatPanel.querySelector('#chat-send-btn').onclick = sendChatMessage;
+    chatPanel.querySelector('#chat-input').onkeypress = (e) => e.key === 'Enter' && sendChatMessage();
+    chatPanel.querySelector('#chat-input').value = oldChatInput;
+    layout.appendChild(chatPanel);
+
+    // COLUMN 2: GAME AREA
     const check = isTeamInCheck(currentTurn, boardState);
     let sTxt = forcedStatus || (isGameOver ? "GAME OVER" : `${currentTurn.toUpperCase()}'S TURN ${check ? '(CHECK!)' : ''}`);
 
@@ -405,10 +452,7 @@ function render(forcedStatus) {
     const boardCont = document.createElement('div'); boardCont.id = 'board-container';
     const boardEl = document.createElement('div'); boardEl.id = 'board';
     
-    let hints = [];
-    if(selected && !isGameOver) {
-        hints = getLegalMoves(currentTurn).filter(m => m.from.r === selected.r && m.from.c === selected.c).map(m => m.to);
-    }
+    let hints = (selected && !isGameOver) ? getLegalMoves(currentTurn).filter(m => m.from.r === selected.r && m.from.c === selected.c).map(m => m.to) : [];
 
     const range = (myColor === 'black') ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
     for(let r of range) {
@@ -432,15 +476,9 @@ function render(forcedStatus) {
             sq.onclick = () => {
                 if(isGameOver || currentTurn !== myColor) return;
                 if(selected) {
-                    if(selected.r === r && selected.c === c) {
-                        selected = null; render();
-                    } 
-                    else if(hints.some(h => h.r === r && h.c === c)) {
-                        handleActualMove(selected, {r,c}, true);
-                    }
-                    else { 
-                        selected = getTeam(piece) === currentTurn ? {r,c} : null; render(); 
-                    }
+                    if(selected.r === r && selected.c === c) { selected = null; render(); } 
+                    else if(hints.some(h => h.r === r && h.c === c)) handleActualMove(selected, {r,c}, true);
+                    else { selected = getTeam(piece) === currentTurn ? {r,c} : null; render(); }
                 } else if(getTeam(piece) === currentTurn) { selected = {r,c}; render(); }
             };
             boardEl.appendChild(sq);
@@ -451,6 +489,7 @@ function render(forcedStatus) {
     else gameArea.appendChild(createBar(whiteName, 'white'));
     layout.appendChild(gameArea);
 
+    // COLUMN 3: SIDE PANEL
     const side = document.createElement('div'); side.id = 'side-panel';
     side.innerHTML = `<div id="status-box"><div id="status-text">${sTxt}</div></div><div id="notification-area"></div><div class="btn-row"><button class="action-btn" onclick="offerDraw()" ${isGameOver ? 'disabled' : ''}>Offer Draw</button><button class="action-btn" onclick="resignGame()" ${isGameOver ? 'disabled' : ''}>Resign</button></div><div id="history-container"></div>`;
     const hCont = side.querySelector('#history-container');
@@ -462,16 +501,9 @@ function render(forcedStatus) {
 }
 
 function initGameState() {
-    // RESET BOARD & LOGIC
     boardState = [['♜','♞','♝','♛','♚','♝','♞','♜'],['♟','♟','♟','♟','♟','♟','♟','♟'],['','','','','','','',''],['','','','','','','',''],['','','','','','','',''],['','','','','','','',''],['♙','♙','♙','♙','♙','♙','♙','♙'],['♖','♘','♗','♕','♔','♗','♘','♖']];
-    currentTurn = 'white'; 
-    hasMoved = {}; 
-    moveHistory = []; 
-    isGameOver = false; 
-    selected = null; 
-    rematchRequested = false;
+    currentTurn = 'white'; hasMoved = {}; moveHistory = []; isGameOver = false; selected = null; rematchRequested = false;
 
-    // RESET CLOCKS BASED ON ORIGINAL SETTINGS
     if (gameSettings) {
         whiteTime = (parseInt(gameSettings.mins) * 60) + parseInt(gameSettings.secs);
         blackTime = whiteTime;
