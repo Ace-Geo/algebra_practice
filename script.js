@@ -187,7 +187,7 @@ function sendChatMessage() {
     input.value = '';
 }
 
-// FIXED OBJECT
+// 1. IMPROVED OBJECT DEFINITION
 const COMMANDS_HELP = {
     "pause": { desc: "Pauses or resumes the game clocks.", usage: "/pause <true or false>" },
     "time": { desc: "Sets the remaining time for a specific player.", usage: "/time <colour> <minutes> <seconds>" },
@@ -200,7 +200,7 @@ function handleAdminCommand(cmd) {
 
     if (baseCmd === "help") {
         const sub = args[1]?.toLowerCase();
-        // FIXED: Explicitly printing the .usage property
+        // 2. LOGIC FIX: Check if sub-command exists in our help object
         if (sub && COMMANDS_HELP[sub]) {
             appendChatMessage("Console", `Usage: ${COMMANDS_HELP[sub].usage}`, true);
         } else {
@@ -215,6 +215,7 @@ function handleAdminCommand(cmd) {
         if (val === "true" || val === "false") {
             socket.emit("admin-pause-toggle", { password: currentPassword, isPaused: val === "true" });
         } else {
+            // 3. FALLBACK FIX: Pull usage directly from the object if arguments are wrong
             appendChatMessage("Console", "Command missing arguments.", true);
             appendChatMessage("Console", `Usage: ${COMMANDS_HELP.pause.usage}`, true);
         }
@@ -230,6 +231,7 @@ function handleAdminCommand(cmd) {
                 newTime: (mins * 60) + secs
             });
         } else {
+            // 4. FALLBACK FIX: Pull usage directly from the object if arguments are wrong
             appendChatMessage("Console", "Command missing arguments.", true);
             appendChatMessage("Console", `Usage: ${COMMANDS_HELP.time.usage}`, true);
         }
