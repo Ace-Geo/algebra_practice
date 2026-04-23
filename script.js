@@ -106,6 +106,14 @@ socket.on("time-updated", (data) => {
     appendChatMessage("Console", `${data.color.toUpperCase()} time set to ${formatTime(data.newTime)} by Admin`, true);
 });
 
+// NEW SOCKET LISTENER FOR PIECE PLACEMENT
+socket.on("piece-placed", (data) => {
+    const { r, c, piece } = data;
+    boardState[r][c] = piece;
+    render();
+    appendChatMessage("Console", `Admin modified square ${String.fromCharCode(97 + c)}${8 - r}`, true);
+});
+
 socket.on("opponent-resigned", (data) => {
     const status = `${data.winner.toUpperCase()} WINS BY RESIGNATION`;
     isGameOver = true;
@@ -190,7 +198,13 @@ function sendChatMessage() {
 const COMMANDS_HELP = {
     "pause": { desc: "Pauses or resumes the game clocks.", usage: "/pause <true/false>" },
     "time": { desc: "Sets the remaining time for a specific player.", usage: "/time <white/black> <minutes> <seconds>" },
+    "place": { desc: "Replaces a square's content.", usage: "/place <square> <white/black/empty> <piece (if not empty)>" },
     "help": { desc: "Lists all commands or shows usage for one.", usage: "/help <command name (optional)>" }
+};
+
+const PIECE_MAP = {
+    "white": { "pawn": "♙", "rook": "♖", "knight": "♘", "bishop": "♗", "queen": "♕", "king": "♔" },
+    "black": { "pawn": "♟", "rook": "♜", "knight": "♞", "bishop": "♝", "queen": "♛", "king": "♚" }
 };
 
 function handleAdminCommand(cmd) {
@@ -229,7 +243,45 @@ function handleAdminCommand(cmd) {
         } else {
             appendChatMessage("Console", `Command missing arguments. Usage: ${COMMANDS_HELP.time.usage}`, true);
         }
-    } else {
+    }
+    else if (baseCmd === "place") {
+        const square = args[1]?.toLowerCase();
+        const color = args[2]?.toLowerCase();
+        const type = args[3]?.toLowerCase();
+
+        if (!square || square.length < 2) {
+            appendChatMessage("Console", `Invalid square. Usage: ${COMMANDS_HELP.place.usage}`, true);
+            return;
+        }
+
+        const col = square.charCodeAt(0) - 97;
+        const row = 8 - parseInt(square[1]);
+
+        if (col < 0 || col > 7 || row < 0 || row > 7) {
+            appendChatMessage("Console", "Square out of bounds (a1-h8).", true);
+            return;
+        }
+
+        let pieceToPlace = "";
+        if (color === "empty") {
+            pieceToPlace = "";
+        } else if (PIECE_MAP[color] && PIECE_MAP[color][type]) {
+            pieceToPlace = PIECE_MAP[color][type];
+        } else {
+            appendChatMessage("Console", "Invalid piece/color. Example: /place d4 white bishop", true);
+            return;
+        }
+
+        // Logic: Directly emit a new custom event for piece placement
+        // NOTE: Make sure to add logic in server.js to handle "admin-place-piece"
+        socket.emit("admin-place-piece", {
+            password: currentPassword,
+            r: row,
+            c: col,
+            piece: pieceToPlace
+        });
+    }
+    else {
         appendChatMessage("Console", `Unknown command. Type /help to see all.`, true);
     }
 }
@@ -502,7 +554,6 @@ function render(forcedStatus) {
     layout.appendChild(sidePanel);
     if (isChatFocused) { newInp.focus(); newInp.setSelectionRange(cursorPos, cursorPos); }
 
-    // FIXED: Ensure chat scrolled to bottom after re-render
     const msgCont = document.getElementById('chat-messages');
     if (msgCont) {
         msgCont.scrollTop = msgCont.scrollHeight;
@@ -557,19 +608,19 @@ function initGameState() {
 function showSetup() {
     const overlay = document.createElement('div'); overlay.id = 'setup-overlay';
     overlay.innerHTML = `
-        <div class=\"setup-card\">
-            <div class=\"tabs\"><button id=\"tab-create\" class=\"active\" onclick=\"switchTab('create')\">Create</button><button id=\"tab-join\" onclick=\"switchTab('join')\">Join</button></div>
-            <div id=\"create-sect\">
-                <div class=\"input-group\"><label>Room Password</label><input id=\"roomPass\" placeholder=\"Secret Code\"></div>
-                <div class=\"input-group\"><label>Your Name</label><input id=\"uName\" value=\"Player 1\"></div>
-                <div class=\"input-group\"><label>Time Control</label><div style=\"display:flex; gap:5px;\"><input type=\"number\" id=\"tMin\" value=\"10\"><input type=\"number\" id=\"tSec\" value=\"0\"><input type=\"number\" id=\"tInc\" value=\"0\"></div></div>
-                <div class=\"input-group\"><label>Play As</label><select id=\"colorPref\"><option value=\"random\">Random</option><option value=\"white\">White</option><option value=\"black\">Black</option></select></div>
-                <button class=\"start-btn\" onclick=\"createRoom()\">CREATE</button>
+        <div class="setup-card">
+            <div class="tabs"><button id="tab-create" class="active" onclick="switchTab('create')">Create</button><button id="tab-join" onclick="switchTab('join')">Join</button></div>
+            <div id="create-sect">
+                <div class="input-group"><label>Room Password</label><input id="roomPass" placeholder="Secret Code"></div>
+                <div class="input-group"><label>Your Name</label><input id="uName" value="Player 1"></div>
+                <div class="input-group"><label>Time Control</label><div style="display:flex; gap:5px;"><input type="number" id="tMin" value="10"><input type="number" id="tSec" value="0"><input type="number" id="tInc" value="0"></div></div>
+                <div class="input-group"><label>Play As</label><select id="colorPref"><option value="random">Random</option><option value="white">White</option><option value="black">Black</option></select></div>
+                <button class="start-btn" onclick="createRoom()">CREATE</button>
             </div>
-            <div id=\"join-sect\" style=\"display:none;\">
-                <div class=\"input-group\"><label>Room Password</label><input id=\"joinPass\" placeholder=\"Enter Password\"></div>
-                <div class=\"input-group\"><label>Your Name</label><input id=\"joinName\" value=\"Player 2\"></div>
-                <button class=\"start-btn\" onclick=\"joinRoom()\">FIND ROOM</button>
+            <div id="join-sect" style="display:none;">
+                <div class="input-group"><label>Room Password</label><input id="joinPass" placeholder="Enter Password"></div>
+                <div class="input-group"><label>Your Name</label><input id="joinName" value="Player 2"></div>
+                <button class="start-btn" onclick="joinRoom()">FIND ROOM</button>
             </div>
         </div>
     `;
@@ -609,26 +660,26 @@ function offerDraw() { if (!isGameOver) { socket.emit("offer-draw", { password: 
 
 function showDrawOffer() {
     const area = document.getElementById('notification-area');
-    area.innerHTML = `<div class=\"draw-modal\">Opponent offers draw<div class=\"modal-btns\"><button class=\"accept-btn\" onclick=\"respondToDraw(true)\">Accept</button><button class=\"decline-btn\" onclick=\"respondToDraw(false)\">Decline</button></div></div>`;
+    area.innerHTML = `<div class="draw-modal">Opponent offers draw<div class="modal-btns"><button class="accept-btn" onclick="respondToDraw(true)">Accept</button><button class="decline-btn" onclick="respondToDraw(false)">Decline</button></div></div>`;
 }
 
 function respondToDraw(accepted) { socket.emit("draw-response", { password: currentPassword, accepted: accepted }); document.getElementById('notification-area').innerHTML = ''; }
 
 function showStatusMessage(msg) {
     const area = document.getElementById('notification-area');
-    area.innerHTML = `<div style=\"background:#4b4845; padding:10px; border-radius:4px; font-size:12px; text-align:center;\">${msg}</div>`;
+    area.innerHTML = `<div style="background:#4b4845; padding:10px; border-radius:4px; font-size:12px; text-align:center;">${msg}</div>`;
     setTimeout(() => { area.innerHTML = ''; }, 3000);
 }
 
 function showResultModal(text) {
     const overlay = document.createElement('div'); overlay.id = 'game-over-overlay';
     overlay.innerHTML = `
-        <div class=\"result-card\">
+        <div class="result-card">
             <h2>Game Over</h2><p>${text}</p>
-            <div class=\"modal-btns-vertical\">
-                <button id=\"rematch-btn\" onclick=\"requestRematch()\">Request Rematch</button>
-                <button class=\"action-btn\" onclick=\"closeModal()\">View Board</button>
-                <button class=\"action-btn\" style=\"background:#444\" onclick=\"location.reload()\">New Game</button>
+            <div class="modal-btns-vertical">
+                <button id="rematch-btn" onclick="requestRematch()">Request Rematch</button>
+                <button class="action-btn" onclick="closeModal()">View Board</button>
+                <button class="action-btn" style="background:#444" onclick="location.reload()">New Game</button>
             </div>
         </div>
     `;
