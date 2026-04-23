@@ -4,13 +4,10 @@ const http = require('http').createServer(app);
 const io = require("socket.io")(http, { cors: { origin: "*" } });
 
 const PORT = process.env.PORT || 3000;
-
 const rooms = {}; 
 const roomRematchStates = {}; 
 
 io.on("connection", (socket) => {
-    console.log("A user connected:", socket.id);
-
     socket.on("create-room", (data) => {
         const { password, name, mins, secs, inc, colorPref } = data;
         if (rooms[password]) {
@@ -40,8 +37,8 @@ io.on("connection", (socket) => {
             return;
         }
         socket.emit("preview-settings", {
-            settings: room.settings,
             creatorName: room.creatorName,
+            settings: room.settings,
             creatorColorPref: room.settings.colorPref
         });
     });
@@ -52,62 +49,49 @@ io.on("connection", (socket) => {
         if (!room || room.status !== "waiting") return;
 
         socket.join(password);
-        room.status = "playing";
+        room.status = "active";
+        const joinerId = socket.id;
+        const creatorId = room.creatorId;
 
-        let creatorColor, joinerColor;
+        let whiteId, blackId;
         const pref = room.settings.colorPref;
-
-        if (pref === 'white') {
-            creatorColor = 'white';
-            joinerColor = 'black';
-        } else if (pref === 'black') {
-            creatorColor = 'black';
-            joinerColor = 'white';
-        } else {
-            creatorColor = Math.random() < 0.5 ? 'white' : 'black';
-            joinerColor = creatorColor === 'white' ? 'black' : 'white';
+        if (pref === 'white') { whiteId = creatorId; blackId = joinerId; }
+        else if (pref === 'black') { whiteId = joinerId; blackId = creatorId; }
+        else {
+            if (Math.random() < 0.5) { whiteId = creatorId; blackId = joinerId; }
+            else { whiteId = joinerId; blackId = creatorId; }
         }
 
-        room.players[creatorColor] = room.creatorId;
-        room.players[joinerColor] = socket.id;
+        room.players.white = whiteId;
+        room.players.black = blackId;
 
-        // Tell creator their assignment
-        io.to(room.creatorId).emit("player-assignment", {
-            color: creatorColor,
+        io.to(creatorId).emit("player-assignment", { 
+            color: creatorId === whiteId ? 'white' : 'black', 
             settings: room.settings,
             oppName: name
         });
-
-        // Tell joiner their assignment
-        socket.emit("player-assignment", {
-            color: joinerColor,
+        io.to(joinerId).emit("player-assignment", { 
+            color: joinerId === whiteId ? 'white' : 'black', 
             settings: room.settings,
             oppName: room.creatorName
         });
     });
 
     socket.on("send-move", (data) => {
-        // Broadcast move and synchronized times to the opponent
-        socket.to(data.password).emit("receive-move", {
-            move: data.move,
-            whiteTime: data.whiteTime,
-            blackTime: data.blackTime
-        });
+        socket.to(data.password).emit("receive-move", data);
     });
 
     socket.on("send-chat", (data) => {
         socket.to(data.password).emit("receive-chat", {
-            sender: data.senderName,
-            message: data.message
+            message: data.message,
+            sender: data.senderName
         });
     });
 
-    // --- ADMIN COMMAND HANDLERS ---
+    // --- ADMIN COMMANDS ---
 
     socket.on("admin-pause-toggle", (data) => {
-        io.in(data.password).emit("pause-state-updated", {
-            isPaused: data.isPaused
-        });
+        io.in(data.password).emit("pause-state-updated", { isPaused: data.isPaused });
     });
 
     socket.on("admin-set-time", (data) => {
@@ -117,12 +101,9 @@ io.on("connection", (socket) => {
         });
     });
 
-    socket.on("admin-place-piece", (data) => {
-        // Broadcast the specific piece placement to everyone in the room
-        io.in(data.password).emit("piece-placed", {
-            r: data.r,
-            c: data.c,
-            piece: data.piece
+    socket.on("admin-set-increment", (data) => {
+        io.in(data.password).emit("increment-updated", {
+            newInc: data.newInc
         });
     });
 
@@ -158,17 +139,12 @@ io.on("connection", (socket) => {
         }
     });
 
-    socket.on("disconnect", () => {
-        console.log("User disconnected:", socket.id);
-        // Clean up rooms if necessary
-        for (const pass in rooms) {
-            if (rooms[pass].creatorId === socket.id && rooms[pass].status === "waiting") {
-                delete rooms[pass];
-            }
-        }
+    socket.on("disconnecting", () => {
+        socket.rooms.forEach(roomPass => {
+            if (rooms[roomPass]) delete rooms[roomPass];
+            if (roomRematchStates[roomPass]) delete roomRematchStates[roomPass];
+        });
     });
 });
 
-http.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+http.listen(PORT, () => console.log(`Server running on port ${PORT}`));
