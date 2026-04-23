@@ -5,7 +5,7 @@ let currentPassword = null;
 let tempName = "";
 let whiteName = "White";
 let blackName = "Black";
-a
+
 let boardState;
 let currentTurn;
 let hasMoved;
