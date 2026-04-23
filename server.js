@@ -92,7 +92,6 @@ io.on("connection", (socket) => {
         io.in(data.password).emit("pause-state-updated", { isPaused: data.isPaused });
     });
 
-    // NEW: Handle admin setting specific time
     socket.on("admin-set-time", (data) => {
         io.in(data.password).emit("time-updated", {
             color: data.color,
@@ -116,7 +115,6 @@ io.on("connection", (socket) => {
         const pass = data.password;
         if (!roomRematchStates[pass]) roomRematchStates[pass] = new Set();
         
-        // Toggle logic for rematch
         if (roomRematchStates[pass].has(socket.id)) {
             roomRematchStates[pass].delete(socket.id);
             socket.to(pass).emit("rematch-canceled");
