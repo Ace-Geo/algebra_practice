@@ -88,7 +88,6 @@ io.on("connection", (socket) => {
         });
     });
 
-    // CRITICAL FIX: Use io.in().emit to reach EVERYONE in the room
     socket.on("admin-pause-toggle", (data) => {
         io.in(data.password).emit("pause-state-updated", { isPaused: data.isPaused });
     });
@@ -117,6 +116,7 @@ io.on("connection", (socket) => {
         }
     });
 
+    // ONLY NEW ADDITION TO SERVER:
     socket.on("cancel-rematch", (data) => {
         const pass = data.password;
         if (roomRematchStates[pass]) {
