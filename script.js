@@ -187,7 +187,7 @@ function sendChatMessage() {
     input.value = '';
 }
 
-// --- HARD-CODED ADMIN LOGIC ---
+// --- FULL HARD-CODED COMMAND SYSTEM ---
 function handleAdminCommand(cmd) {
     const args = cmd.split(' ');
     const baseCmd = args[0].toLowerCase().substring(1);
@@ -195,17 +195,22 @@ function handleAdminCommand(cmd) {
     switch (baseCmd) {
         case "help":
             const sub = args[1]?.toLowerCase();
-            if (sub === "pause") {
+            if (!sub) {
+                // DEFAULT HELP LIST: Command + Short Description
+                appendChatMessage("Console", "Admin Commands:", true);
+                appendChatMessage("Console", "/help - Show this list", true);
+                appendChatMessage("Console", "/pause - Stop or start the clocks", true);
+                appendChatMessage("Console", "/time - Set a player's remaining time", true);
+                appendChatMessage("Console", "Type /help <command> for arguments.", true);
+            } 
+            else if (sub === "pause") {
                 appendChatMessage("Console", "Usage: /pause <true/false>", true);
-                appendChatMessage("Console", "Info: true pauses, false resumes.", true);
             } 
             else if (sub === "time") {
                 appendChatMessage("Console", "Usage: /time <white/black> <min> <sec>", true);
-                appendChatMessage("Console", "Info: Overwrites current clock time.", true);
             } 
-            else {
-                appendChatMessage("Console", "Commands: /pause, /time, /help", true);
-                appendChatMessage("Console", "Type /help <cmd> for more details.", true);
+            else if (sub === "help") {
+                appendChatMessage("Console", "Usage: /help <command_name>", true);
             }
             break;
 
@@ -214,7 +219,7 @@ function handleAdminCommand(cmd) {
             if (pVal === "true" || pVal === "false") {
                 socket.emit("admin-pause-toggle", { password: currentPassword, isPaused: pVal === "true" });
             } else {
-                appendChatMessage("Console", "Error: Missing true/false.", true);
+                appendChatMessage("Console", "Error: Argument missing.", true);
                 appendChatMessage("Console", "Usage: /pause <true/false>", true);
             }
             break;
@@ -230,13 +235,13 @@ function handleAdminCommand(cmd) {
                     newTime: (mins * 60) + secs
                 });
             } else {
-                appendChatMessage("Console", "Error: Missing arguments.", true);
+                appendChatMessage("Console", "Error: Arguments missing or invalid.", true);
                 appendChatMessage("Console", "Usage: /time <white/black> <min> <sec>", true);
             }
             break;
 
         default:
-            appendChatMessage("Console", `Unknown command: /${baseCmd}`, true);
+            appendChatMessage("Console", `Unknown command: /${baseCmd}. Type /help.`, true);
     }
 }
 
