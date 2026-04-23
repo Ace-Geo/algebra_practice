@@ -187,6 +187,7 @@ function sendChatMessage() {
     input.value = '';
 }
 
+// FIXED OBJECT
 const COMMANDS_HELP = {
     "pause": { desc: "Pauses or resumes the game clocks.", usage: "/pause <true or false>" },
     "time": { desc: "Sets the remaining time for a specific player.", usage: "/time <colour> <minutes> <seconds>" },
@@ -199,6 +200,7 @@ function handleAdminCommand(cmd) {
 
     if (baseCmd === "help") {
         const sub = args[1]?.toLowerCase();
+        // FIXED: Explicitly printing the .usage property
         if (sub && COMMANDS_HELP[sub]) {
             appendChatMessage("Console", `Usage: ${COMMANDS_HELP[sub].usage}`, true);
         } else {
