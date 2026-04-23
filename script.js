@@ -90,8 +90,16 @@ socket.on("receive-chat", (data) => {
     appendChatMessage(data.sender, data.message);
 });
 
+// SYNC PAUSE ACROSS CLIENTS
 socket.on("pause-state-updated", (data) => {
     isPaused = data.isPaused;
+    
+    if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
+    
+    if (!isPaused && !isGameOver && !isInfinite) {
+        startTimer(); // Restart ticker for both players
+    }
+
     const status = isPaused ? "Game Paused by Admin" : "Game Resumed by Admin";
     appendChatMessage("Console", status, true);
     render(); 
@@ -630,6 +638,22 @@ function formatTime(seconds) {
     return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
+function startTimer() {
+    window.chessIntervalInstance = setInterval(() => {
+        if (isGameOver || isPaused) return;
+        if (currentTurn === 'white') whiteTime--;
+        else blackTime--;
+        updateTimerDisplay();
+        if (whiteTime <= 0 || blackTime <= 0) {
+            isGameOver = true;
+            clearInterval(window.chessIntervalInstance);
+            const msg = whiteTime <= 0 ? "BLACK WINS ON TIME" : "WHITE WINS ON TIME";
+            showResultModal(msg);
+            render(msg);
+        }
+    }, 1000);
+}
+
 function initGameState() {
     boardState = [
         ['♜', '♞', '♝', '♛', '♚', '♝', '♞', '♜'],
@@ -658,19 +682,7 @@ function initGameState() {
 
     if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
     if (!isInfinite) {
-        window.chessIntervalInstance = setInterval(() => {
-            if (isGameOver || isPaused) return;
-            if (currentTurn === 'white') whiteTime--;
-            else blackTime--;
-            updateTimerDisplay();
-            if (whiteTime <= 0 || blackTime <= 0) {
-                isGameOver = true;
-                clearInterval(window.chessIntervalInstance);
-                const msg = whiteTime <= 0 ? "BLACK WINS ON TIME" : "WHITE WINS ON TIME";
-                showResultModal(msg);
-                render(msg);
-            }
-        }, 1000);
+        startTimer();
     }
     render();
 }
