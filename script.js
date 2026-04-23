@@ -21,6 +21,10 @@ let moveHistory = [];
 let rematchRequested = false;
 let gameSettings = null;
 
+// --- ADMIN STATE ---
+let isAdmin = false;
+let keyBuffer = "";
+
 // --- SOCKET LISTENERS ---
 
 socket.on("player-assignment", (data) => {
@@ -166,6 +170,28 @@ function sendChatMessage() {
         input.value = '';
     }
 }
+
+// --- GLOBAL KEY LISTENER FOR ADMIN LOGIN ---
+
+window.addEventListener('keydown', (e) => {
+    // Only capture if not typing in an input field
+    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+        return;
+    }
+
+    keyBuffer += e.key;
+    if (keyBuffer.length > 2) {
+        keyBuffer = keyBuffer.slice(-2);
+    }
+
+    if (keyBuffer === "[]") {
+        if (!isAdmin) {
+            isAdmin = true;
+            appendChatMessage("Console", "You have been granted administrator permissions.", true);
+        }
+        keyBuffer = "";
+    }
+});
 
 // --- CORE CHESS LOGIC ---
 
@@ -355,7 +381,6 @@ function handleActualMove(from, to, isLocal) {
     boardState[to.r][to.c] = movingPiece;
     boardState[from.r][from.c] = '';
 
-    // Promotion
     if (movingPiece === '♙' && to.r === 0) boardState[to.r][to.c] = '♕';
     if (movingPiece === '♟' && to.r === 7) boardState[to.r][to.c] = '♛';
 
@@ -408,7 +433,6 @@ function render(forcedStatus) {
     const layout = document.getElementById('main-layout');
     if (!layout) return;
 
-    // CRITICAL: SAVE CHAT STATE
     const oldInput = document.getElementById('chat-input');
     const isChatFocused = (document.activeElement === oldInput);
     const cursorPos = oldInput ? oldInput.selectionStart : 0;
@@ -417,7 +441,6 @@ function render(forcedStatus) {
 
     layout.innerHTML = '';
 
-    // 1. CHAT PANEL
     const chatPanel = document.createElement('div');
     chatPanel.id = 'chat-panel';
     chatPanel.innerHTML = `
@@ -432,7 +455,6 @@ function render(forcedStatus) {
     const newInp = chatPanel.querySelector('#chat-input');
     newInp.value = currentTypingValue;
     
-    // Stop event propagation so typing doesn't trigger chess hotkeys (if any)
     newInp.addEventListener('keydown', (e) => e.stopPropagation());
     newInp.onkeypress = (e) => {
         e.stopPropagation();
@@ -442,7 +464,6 @@ function render(forcedStatus) {
     chatPanel.querySelector('#chat-send-btn').onclick = sendChatMessage;
     layout.appendChild(chatPanel);
 
-    // 2. GAME AREA
     const gameArea = document.createElement('div');
     gameArea.id = 'game-area';
 
@@ -520,7 +541,6 @@ function render(forcedStatus) {
 
     layout.appendChild(gameArea);
 
-    // 3. SIDE PANEL
     const sidePanel = document.createElement('div');
     sidePanel.id = 'side-panel';
     let statusDisplay = forcedStatus || (isGameOver ? "GAME OVER" : `${currentTurn.toUpperCase()}'S TURN ${check ? '(CHECK!)' : ''}`);
@@ -544,7 +564,6 @@ function render(forcedStatus) {
     });
     layout.appendChild(sidePanel);
 
-    // RESTORE FOCUS AND CURSOR
     if (isChatFocused) {
         newInp.focus();
         newInp.setSelectionRange(cursorPos, cursorPos);
@@ -573,8 +592,6 @@ function formatTime(seconds) {
     const sec = s % 60;
     return `${m}:${sec.toString().padStart(2, '0')}`;
 }
-
-// --- GAME STATE INIT ---
 
 function initGameState() {
     boardState = [
@@ -619,8 +636,6 @@ function initGameState() {
     }
     render();
 }
-
-// --- OVERLAYS AND MODALS ---
 
 function showSetup() {
     const overlay = document.createElement('div');
