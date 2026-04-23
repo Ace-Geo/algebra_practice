@@ -106,11 +106,9 @@ socket.on("time-updated", (data) => {
     appendChatMessage("Console", `${data.color.toUpperCase()} time set to ${formatTime(data.newTime)} by Admin`, true);
 });
 
-socket.on("piece-placed", (data) => {
-    const { r, c, piece } = data;
-    boardState[r][c] = piece;
-    render();
-    appendChatMessage("Console", `Admin modified square ${String.fromCharCode(97 + c)}${8 - r}`, true);
+socket.on("increment-updated", (data) => {
+    increment = data.newInc;
+    appendChatMessage("Console", `Increment set to ${increment}s by Admin`, true);
 });
 
 socket.on("opponent-resigned", (data) => {
@@ -194,16 +192,12 @@ function sendChatMessage() {
     input.value = '';
 }
 
+// Helper for showing help info
 const COMMANDS_HELP = {
     "pause": { desc: "Pauses or resumes the game clocks.", usage: "/pause <true/false>" },
     "time": { desc: "Sets the remaining time for a specific player.", usage: "/time <white/black> <minutes> <seconds>" },
-    "place": { desc: "Replaces a square's content.", usage: "/place <square> <white/black/empty> <piece (if not empty)>" },
+    "increment": { desc: "Changes the bonus seconds added after each move.", usage: "/increment <seconds>" },
     "help": { desc: "Lists all commands or shows usage for one.", usage: "/help <command name (optional)>" }
-};
-
-const PIECE_MAP = {
-    "white": { "pawn": "♙", "rook": "♖", "knight": "♘", "bishop": "♗", "queen": "♕", "king": "♔" },
-    "black": { "pawn": "♟", "rook": "♜", "knight": "♞", "bishop": "♝", "queen": "♛", "king": "♚" }
 };
 
 function handleAdminCommand(cmd) {
@@ -243,40 +237,16 @@ function handleAdminCommand(cmd) {
             appendChatMessage("Console", `Command missing arguments. Usage: ${COMMANDS_HELP.time.usage}`, true);
         }
     }
-    else if (baseCmd === "place") {
-        const square = args[1]?.toLowerCase();
-        const color = args[2]?.toLowerCase();
-        const type = args[3]?.toLowerCase();
-
-        if (!square || square.length < 2) {
-            appendChatMessage("Console", `Invalid square. Usage: ${COMMANDS_HELP.place.usage}`, true);
-            return;
-        }
-
-        const col = square.charCodeAt(0) - 97;
-        const row = 8 - parseInt(square[1]);
-
-        if (col < 0 || col > 7 || row < 0 || row > 7) {
-            appendChatMessage("Console", "Square out of bounds (a1-h8).", true);
-            return;
-        }
-
-        let pieceToPlace = "";
-        if (color === "empty") {
-            pieceToPlace = "";
-        } else if (PIECE_MAP[color] && PIECE_MAP[color][type]) {
-            pieceToPlace = PIECE_MAP[color][type];
+    else if (baseCmd === "increment") {
+        const newInc = parseInt(args[1]);
+        if (!isNaN(newInc)) {
+            socket.emit("admin-set-increment", {
+                password: currentPassword,
+                newInc: newInc
+            });
         } else {
-            appendChatMessage("Console", "Invalid piece/color. Example: /place d4 white bishop", true);
-            return;
+            appendChatMessage("Console", `Usage: ${COMMANDS_HELP.increment.usage}`, true);
         }
-
-        socket.emit("admin-place-piece", {
-            password: currentPassword,
-            r: row,
-            c: col,
-            piece: pieceToPlace
-        });
     }
     else {
         appendChatMessage("Console", `Unknown command. Type /help to see all.`, true);
@@ -518,15 +488,15 @@ function render(forcedStatus) {
             sq.onclick = () => {
                 if (isGameOver || currentTurn !== myColor) return;
                 
-                // --- NEW CLICK LOGIC ---
+                // --- REVISED SELECTION LOGIC ---
                 if (selected) {
-                    // 1. If clicking a hint (legal move), execute the move
+                    // 1. If clicking a legal destination hint, move
                     if (hints.some(h => h.r === r && h.c === c)) {
                         handleActualMove(selected, { r, c }, true);
                     } 
-                    // 2. If clicking another piece of the same color, switch selection
+                    // 2. If clicking another of your own pieces, switch selection
                     else if (getTeam(boardState[r][c]) === currentTurn) {
-                        // If clicking the SAME piece already selected, deselect it
+                        // If clicking the piece already selected, deselect it
                         if (selected.r === r && selected.c === c) {
                             selected = null;
                         } else {
@@ -534,13 +504,13 @@ function render(forcedStatus) {
                         }
                         render();
                     } 
-                    // 3. If clicking an illegal square or opponent piece, deselect
+                    // 3. If clicking an illegal square (empty or opponent), just deselect
                     else {
                         selected = null;
                         render();
                     }
                 } else {
-                    // No piece selected: select only if it's your turn and your piece
+                    // No selection: only select if it's your own piece
                     if (getTeam(boardState[r][c]) === currentTurn) {
                         selected = { r, c };
                         render();
@@ -574,12 +544,6 @@ function render(forcedStatus) {
     });
     layout.appendChild(sidePanel);
     if (isChatFocused) { newInp.focus(); newInp.setSelectionRange(cursorPos, cursorPos); }
-
-    const msgCont = document.getElementById('chat-messages');
-    if (msgCont) {
-        msgCont.scrollTop = msgCont.scrollHeight;
-    }
-    
     updateTimerDisplay();
 }
 
