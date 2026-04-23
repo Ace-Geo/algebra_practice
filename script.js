@@ -90,6 +90,13 @@ socket.on("receive-chat", (data) => {
     appendChatMessage(data.sender, data.message);
 });
 
+socket.on("pause-state-updated", (data) => {
+    isPaused = data.isPaused;
+    const status = isPaused ? "Game Paused by Admin" : "Game Resumed by Admin";
+    appendChatMessage("Console", status, true);
+    render(); 
+});
+
 socket.on("opponent-resigned", (data) => {
     const status = `${data.winner.toUpperCase()} WINS BY RESIGNATION`;
     isGameOver = true;
@@ -162,17 +169,14 @@ function sendChatMessage() {
     
     if (!msg || !currentPassword) return;
 
-    // 1. Check for Admin Commands
     if (msg.startsWith("/")) {
         if (isAdmin) {
             handleAdminCommand(msg);
             input.value = '';
             return;
         }
-        // If not admin, fall through to regular chat
     }
 
-    // 2. Regular Chat Logic
     const myName = (myColor === 'white' ? whiteName : blackName);
     socket.emit("send-chat", {
         password: currentPassword,
@@ -189,21 +193,23 @@ function handleAdminCommand(cmd) {
 
     if (baseCmd === "/pause") {
         const val = args[1]?.toLowerCase();
-        if (val === "true") {
-            isPaused = true;
-            appendChatMessage("Console", "Clocks have been paused.", true);
-        } else if (val === "false") {
-            isPaused = false;
-            appendChatMessage("Console", "Clocks have been resumed.", true);
-        } else {
+        let newState = isPaused;
+
+        if (val === "true") newState = true;
+        else if (val === "false") newState = false;
+        else {
             appendChatMessage("Console", "Usage: /pause true | /pause false", true);
+            return;
         }
+
+        socket.emit("admin-pause-toggle", {
+            password: currentPassword,
+            isPaused: newState
+        });
     } else {
         appendChatMessage("Console", `Unknown command: ${baseCmd}`, true);
     }
 }
-
-// --- GLOBAL KEY LISTENER FOR ADMIN LOGIN ---
 
 window.addEventListener('keydown', (e) => {
     if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
