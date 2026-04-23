@@ -21,8 +21,9 @@ let moveHistory = [];
 let rematchRequested = false;
 let gameSettings = null;
 
-// --- ADMIN STATE ---
+// --- ADMIN & COMMAND STATE ---
 let isAdmin = false;
+let isPaused = false;
 let keyBuffer = "";
 
 // --- SOCKET LISTENERS ---
@@ -141,7 +142,7 @@ socket.on("error-msg", (msg) => {
     alert(msg);
 });
 
-// --- CHAT FUNCTIONS ---
+// --- CHAT & COMMAND FUNCTIONS ---
 
 function appendChatMessage(sender, message, isSystem = false) {
     const msgContainer = document.getElementById('chat-messages');
@@ -159,22 +160,52 @@ function sendChatMessage() {
     const input = document.getElementById('chat-input');
     const msg = input.value.trim();
     
-    if (msg && currentPassword) {
-        const myName = (myColor === 'white' ? whiteName : blackName);
-        socket.emit("send-chat", {
-            password: currentPassword,
-            message: msg,
-            senderName: myName
-        });
-        appendChatMessage("You", msg);
-        input.value = '';
+    if (!msg || !currentPassword) return;
+
+    // 1. Check for Admin Commands
+    if (msg.startsWith("/")) {
+        if (isAdmin) {
+            handleAdminCommand(msg);
+            input.value = '';
+            return;
+        }
+        // If not admin, fall through to regular chat
+    }
+
+    // 2. Regular Chat Logic
+    const myName = (myColor === 'white' ? whiteName : blackName);
+    socket.emit("send-chat", {
+        password: currentPassword,
+        message: msg,
+        senderName: myName
+    });
+    appendChatMessage("You", msg);
+    input.value = '';
+}
+
+function handleAdminCommand(cmd) {
+    const args = cmd.split(' ');
+    const baseCmd = args[0].toLowerCase();
+
+    if (baseCmd === "/pause") {
+        const val = args[1]?.toLowerCase();
+        if (val === "true") {
+            isPaused = true;
+            appendChatMessage("Console", "Clocks have been paused.", true);
+        } else if (val === "false") {
+            isPaused = false;
+            appendChatMessage("Console", "Clocks have been resumed.", true);
+        } else {
+            appendChatMessage("Console", "Usage: /pause true | /pause false", true);
+        }
+    } else {
+        appendChatMessage("Console", `Unknown command: ${baseCmd}`, true);
     }
 }
 
 // --- GLOBAL KEY LISTENER FOR ADMIN LOGIN ---
 
 window.addEventListener('keydown', (e) => {
-    // Only capture if not typing in an input field
     if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
         return;
     }
@@ -610,6 +641,7 @@ function initGameState() {
     isGameOver = false;
     selected = null;
     rematchRequested = false;
+    isPaused = false;
 
     if (gameSettings) {
         whiteTime = (parseInt(gameSettings.mins) * 60) + parseInt(gameSettings.secs);
@@ -621,7 +653,7 @@ function initGameState() {
     if (window.chessIntervalInstance) clearInterval(window.chessIntervalInstance);
     if (!isInfinite) {
         window.chessIntervalInstance = setInterval(() => {
-            if (isGameOver) return;
+            if (isGameOver || isPaused) return;
             if (currentTurn === 'white') whiteTime--;
             else blackTime--;
             updateTimerDisplay();
