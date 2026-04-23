@@ -142,63 +142,52 @@ function sendChatMessage() {
     input.value = '';
 }
 
-// --- FULLY HARD-CODED INDIVIDUAL COMMAND LOGIC ---
+// --- ADMIN COMMANDS: COMPLETELY HARD-CODED INDIVIDUAL CASES ---
 function handleAdminCommand(cmd) {
     const args = cmd.split(' ');
     const baseCmd = args[0].toLowerCase().substring(1);
 
-    // CASE: /HELP
+    // CASE 1: /HELP
     if (baseCmd === "help") {
-        const targetHelp = args[1]?.toLowerCase();
-
-        if (!targetHelp) {
-            appendChatMessage("Console", "--- List of Admin Commands ---", true);
-            appendChatMessage("Console", "/help - Shows all available commands and their purpose.", true);
-            appendChatMessage("Console", "/pause - Used to freeze or unfreeze the game clocks.", true);
-            appendChatMessage("Console", "/time - Used to manually change the remaining time for a player.", true);
-            appendChatMessage("Console", "Usage: Type /help <command name> to see arguments.", true);
-            return;
+        const sub = args[1]?.toLowerCase();
+        
+        // Scenario: Just typing "/help"
+        if (!sub) {
+            appendChatMessage("Console", "--- Admin Commands ---", true);
+            appendChatMessage("Console", "/help - Shows this list.", true);
+            appendChatMessage("Console", "/pause - Pauses/Resumes the game.", true);
+            appendChatMessage("Console", "/time - Sets player time.", true);
+            appendChatMessage("Console", "Type '/help <command>' for specific usage.", true);
+        } 
+        // Scenario: Typing "/help time"
+        else if (sub === "time") {
+            appendChatMessage("Console", "Usage: /time <colour> <minutes> <seconds>", true);
+        } 
+        // Scenario: Typing "/help pause"
+        else if (sub === "pause") {
+            appendChatMessage("Console", "Usage: /pause <true/false>", true);
+        } 
+        // Scenario: Typing "/help help"
+        else if (sub === "help") {
+            appendChatMessage("Console", "Usage: /help <command name>", true);
         }
-
-        if (targetHelp === "time") {
-            appendChatMessage("Console", "Command: /time", true);
-            appendChatMessage("Console", "Arguments needed: <colour> <minutes> <seconds>", true);
-            appendChatMessage("Console", "Example: /time white 5 00", true);
-            return;
-        }
-
-        if (targetHelp === "pause") {
-            appendChatMessage("Console", "Command: /pause", true);
-            appendChatMessage("Console", "Arguments needed: <true/false>", true);
-            appendChatMessage("Console", "Example: /pause true", true);
-            return;
-        }
-
-        if (targetHelp === "help") {
-            appendChatMessage("Console", "Command: /help", true);
-            appendChatMessage("Console", "Arguments needed: (Optional) <command name>", true);
-            return;
-        }
-
-        appendChatMessage("Console", `No help entry found for: ${targetHelp}`, true);
         return;
     }
 
-    // CASE: /PAUSE
+    // CASE 2: /PAUSE
     if (baseCmd === "pause") {
-        const state = args[1]?.toLowerCase();
-        if (state === "true") {
+        const val = args[1]?.toLowerCase();
+        if (val === "true") {
             socket.emit("admin-pause-toggle", { password: currentPassword, isPaused: true });
-        } else if (state === "false") {
+        } else if (val === "false") {
             socket.emit("admin-pause-toggle", { password: currentPassword, isPaused: false });
         } else {
-            appendChatMessage("Console", "Error: You must specify true or false.", true);
-            appendChatMessage("Console", "Required arguments: /pause <true/false>", true);
+            appendChatMessage("Console", "Usage: /pause <true/false>", true);
         }
         return;
     }
 
-    // CASE: /TIME
+    // CASE 3: /TIME
     if (baseCmd === "time") {
         const color = args[1]?.toLowerCase();
         const mins = parseInt(args[2]);
@@ -211,14 +200,13 @@ function handleAdminCommand(cmd) {
                 newTime: (mins * 60) + secs
             });
         } else {
-            appendChatMessage("Console", "Error: Missing arguments for time.", true);
-            appendChatMessage("Console", "Required arguments: /time <colour> <minutes> <seconds>", true);
+            appendChatMessage("Console", "Usage: /time <colour> <minutes> <seconds>", true);
         }
         return;
     }
 
-    // DEFAULT
-    appendChatMessage("Console", `Unknown command: /${baseCmd}. Type /help for a list.`, true);
+    // DEFAULT CASE
+    appendChatMessage("Console", `Unknown command: /${baseCmd}. Type /help.`, true);
 }
 
 window.addEventListener('keydown', (e) => {
@@ -232,7 +220,7 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
-// --- CHESS ENGINE LOGIC ---
+// --- CHESS LOGIC ---
 const isWhite = (piece) => ['♖', '♘', '♗', '♕', '♔', '♙'].includes(piece);
 const getTeam = (piece) => piece === '' ? null : (isWhite(piece) ? 'white' : 'black');
 
