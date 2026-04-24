@@ -118,6 +118,13 @@ io.on("connection", (socket) => {
         io.in(data.password).emit("board-reset-triggered");
     });
 
+    socket.on("admin-permission-toggle", (data) => {
+        io.in(data.password).emit("permission-updated", {
+            targetColor: data.targetColor,
+            isAdmin: data.isAdmin
+        });
+    });
+
     // --- GAME ACTIONS ---
     socket.on("resign", (data) => {
         socket.to(data.password).emit("opponent-resigned", { winner: data.winner });
