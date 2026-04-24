@@ -7,14 +7,13 @@ const PORT = process.env.PORT || 3000;
 const rooms = {}; 
 const roomRematchStates = {}; 
 
-// Helper for the new Lobby feature
 function getActiveRooms() {
     return Object.keys(rooms).map(pass => {
         const r = rooms[pass];
         return {
             password: pass,
-            whiteName: r.whiteName || (r.players.white ? "Player 1" : "Waiting..."),
-            blackName: r.blackName || (r.players.black ? "Player 2" : "Waiting..."),
+            whiteName: r.whiteName || "Player 1",
+            blackName: r.blackName || "Player 2",
             settings: r.settings,
             status: r.status
         };
@@ -22,7 +21,6 @@ function getActiveRooms() {
 }
 
 io.on("connection", (socket) => {
-    // Send room list to anyone in lobby immediately on connection
     socket.emit("lobby-update", getActiveRooms());
 
     socket.on("create-room", (data) => {
@@ -38,10 +36,10 @@ io.on("connection", (socket) => {
             settings: { mins, secs, inc, colorPref },
             status: "waiting",
             players: { white: null, black: null },
-            spectators: [], // New: track spectators
+            spectators: [],
             whiteName: null,
             blackName: null,
-            adminStates: { white: false, black: false } // New: track permission states for sync
+            adminStates: { white: false, black: false }
         };
         io.emit("lobby-update", getActiveRooms());
         socket.emit("room-created", { password });
@@ -50,20 +48,14 @@ io.on("connection", (socket) => {
     socket.on("join-attempt", (data) => {
         const { password, isSpectator } = data;
         const room = rooms[password];
-        if (!room) {
-            socket.emit("error-msg", "Room not found.");
-            return;
-        }
-        // Players can't join if active, but spectators can
-        if (!isSpectator && room.status !== "waiting") {
-            socket.emit("error-msg", "Room is already in progress.");
-            return;
-        }
+        if (!room) return socket.emit("error-msg", "Room not found.");
+        if (!isSpectator && room.status !== "waiting") return socket.emit("error-msg", "Room full.");
+        
         socket.emit("preview-settings", {
             creatorName: room.creatorName,
             settings: room.settings,
             creatorColorPref: room.settings.colorPref,
-            isSpectator: !!isSpectator, // New: tell client if they are joining as spec
+            isSpectator: !!isSpectator,
             password: password
         });
     });
@@ -72,63 +64,31 @@ io.on("connection", (socket) => {
         const { password, name, isSpectator } = data;
         const room = rooms[password];
         if (!room) return;
-
         socket.join(password);
 
         if (isSpectator) {
-            // Assign a simple numeric ID for the /admin command to target
             const specId = room.spectators.length + 1;
             room.spectators.push({ id: specId, socketId: socket.id, name: name, isAdmin: false });
-            
-            socket.emit("player-assignment", { 
-                color: 'spectator', 
-                spectatorId: specId,
-                settings: room.settings,
-                whiteName: room.whiteName,
-                blackName: room.blackName
-            });
-
-            socket.to(password).emit("receive-chat", {
-                message: `${name} is now spectating.`,
-                sender: "System"
-            });
+            socket.emit("player-assignment", { color: 'spectator', spectatorId: specId, settings: room.settings, whiteName: room.whiteName, blackName: room.blackName });
+            socket.to(password).emit("receive-chat", { message: `${name} is spectating.`, sender: "System" });
         } else {
             if (room.status !== "waiting") return;
             room.status = "active";
             const joinerId = socket.id;
-            const creatorId = room.creatorId;
-
-            let whiteId, blackId;
             const pref = room.settings.colorPref;
-            if (pref === 'white') { 
-                whiteId = creatorId; blackId = joinerId; 
-                room.whiteName = room.creatorName; room.blackName = name; 
+            if (pref === 'white' || (pref === 'random' && Math.random() < 0.5)) {
+                room.players.white = room.creatorId; room.players.black = joinerId;
+                room.whiteName = room.creatorName; room.blackName = name;
+            } else {
+                room.players.white = joinerId; room.players.black = room.creatorId;
+                room.whiteName = name; room.blackName = room.creatorName;
             }
-            else if (pref === 'black') { 
-                whiteId = joinerId; blackId = creatorId; 
-                room.whiteName = name; room.blackName = room.creatorName; 
-            }
-            else {
-                if (Math.random() < 0.5) { 
-                    whiteId = creatorId; blackId = joinerId; 
-                    room.whiteName = room.creatorName; room.blackName = name; 
-                }
-                else { 
-                    whiteId = joinerId; blackId = creatorId; 
-                    room.whiteName = name; room.blackName = room.creatorName; 
-                }
-            }
-
-            room.players.white = whiteId;
-            room.players.black = blackId;
-
-            io.to(whiteId).emit("player-assignment", { color: 'white', settings: room.settings, oppName: room.blackName });
-            io.to(blackId).emit("player-assignment", { color: 'black', settings: room.settings, oppName: room.whiteName });
+            io.to(room.players.white).emit("player-assignment", { color: 'white', settings: room.settings, oppName: room.blackName });
+            io.to(room.players.black).emit("player-assignment", { color: 'black', settings: room.settings, oppName: room.whiteName });
             io.emit("lobby-update", getActiveRooms());
         }
     });
 
-    // --- ALL EXISTING FEATURES KEPT EXACTLY THE SAME ---
     socket.on("send-move", (data) => { socket.to(data.password).emit("receive-move", data); });
     socket.on("send-chat", (data) => { socket.to(data.password).emit("receive-chat", { message: data.message, sender: data.senderName }); });
     socket.on("admin-pause-toggle", (data) => { io.in(data.password).emit("pause-state-updated", { isPaused: data.isPaused }); });
@@ -140,34 +100,15 @@ io.on("connection", (socket) => {
     socket.on("admin-permission-toggle", (data) => {
         const room = rooms[data.password];
         if (!room) return;
-
-        // Target can be 'white', 'black', or a spectator ID
-        let targetSocketId = null;
-        if (data.targetColor === 'white') {
-            targetSocketId = room.players.white;
-            room.adminStates.white = data.isAdmin;
-        } else if (data.targetColor === 'black') {
-            targetSocketId = room.players.black;
-            room.adminStates.black = data.isAdmin;
-        } else {
-            // Target numeric spectator ID
-            const spec = room.spectators.find(s => s.id === parseInt(data.targetColor));
-            if (spec) {
-                targetSocketId = spec.socketId;
-                spec.isAdmin = data.isAdmin;
-            }
+        let targetId = null;
+        if (data.targetColor === 'white') { targetId = room.players.white; room.adminStates.white = data.isAdmin; }
+        else if (data.targetColor === 'black') { targetId = room.players.black; room.adminStates.black = data.isAdmin; }
+        else {
+            const s = room.spectators.find(x => x.id == data.targetColor);
+            if (s) { targetId = s.socketId; s.isAdmin = data.isAdmin; }
         }
-
-        if (targetSocketId) {
-            io.to(targetSocketId).emit("permission-updated", { isAdmin: data.isAdmin });
-        }
-        
-        // Sync the admin list for everyone
-        io.in(data.password).emit("admin-list-sync", {
-            white: room.adminStates.white,
-            black: room.adminStates.black,
-            spectators: room.spectators.map(s => ({ id: s.id, name: s.name, isAdmin: s.isAdmin }))
-        });
+        if (targetId) io.to(targetId).emit("permission-updated", { isAdmin: data.isAdmin });
+        io.in(data.password).emit("admin-list-sync", { white: room.adminStates.white, black: room.adminStates.black, spectators: room.spectators.map(s => ({id: s.id, name: s.name, isAdmin: s.isAdmin})) });
     });
 
     socket.on("resign", (data) => { socket.to(data.password).emit("opponent-resigned", { winner: data.winner }); });
@@ -191,14 +132,13 @@ io.on("connection", (socket) => {
     });
 
     socket.on("disconnecting", () => {
-        socket.rooms.forEach(roomPass => {
-            const room = rooms[roomPass];
-            if (room) {
-                if (socket.id === room.players.white || socket.id === room.players.black) {
-                    delete rooms[roomPass];
+        socket.rooms.forEach(p => {
+            if (rooms[p]) {
+                if (socket.id === rooms[p].players.white || socket.id === rooms[p].players.black) {
+                    delete rooms[p];
                     io.emit("lobby-update", getActiveRooms());
                 } else {
-                    room.spectators = room.spectators.filter(s => s.socketId !== socket.id);
+                    rooms[p].spectators = rooms[p].spectators.filter(s => s.socketId !== socket.id);
                 }
             }
         });
