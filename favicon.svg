@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="12" fill="#1f1f1f"/>
+  <rect x="4" y="4" width="56" height="56" rx="10" fill="#2f2b28" stroke="#779556" stroke-width="2"/>
+  <text x="12" y="40" font-family="Segoe UI, Arial, sans-serif" font-size="28" fill="#eeeed2" font-weight="700">x²</text>
+  <text x="40" y="24" font-family="Segoe UI, Arial, sans-serif" font-size="16" fill="#8dbb5c" font-weight="700">π</text>
+</svg>
