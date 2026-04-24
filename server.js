@@ -50,7 +50,7 @@ io.on("connection", (socket) => {
             creatorName: name,
             settings: { mins, secs, inc, colorPref },
             status: "waiting",
-            players: { white: null, black: null, whiteName: null, blackName: null },
+            players: { white: null, black: null, whiteName: null, blackName: null, whiteAdmin: false, blackAdmin: false },
             spectators: {}
         };
         socket.emit("room-created", { password });
@@ -97,6 +97,8 @@ io.on("connection", (socket) => {
         room.players.black = blackId;
         room.players.whiteName = whiteId === creatorId ? room.creatorName : name;
         room.players.blackName = blackId === creatorId ? room.creatorName : name;
+        room.players.whiteAdmin = false;
+        room.players.blackAdmin = false;
 
         io.to(creatorId).emit("player-assignment", {
             color: creatorId === whiteId ? 'white' : 'black',
@@ -147,6 +149,53 @@ io.on("connection", (socket) => {
 
     socket.on("spectator-state-sync", (data) => {
         io.to(data.targetSocketId).emit("spectator-state-sync", { state: data.state });
+    });
+
+    socket.on("self-admin-enabled", (data) => {
+        const room = rooms[data.password];
+        if (!room) return;
+
+        if (room.players.white === socket.id) {
+            room.players.whiteAdmin = true;
+            io.in(data.password).emit("permission-updated", {
+                targetType: "player",
+                targetColor: "white",
+                isAdmin: true
+            });
+            return;
+        }
+
+        if (room.players.black === socket.id) {
+            room.players.blackAdmin = true;
+            io.in(data.password).emit("permission-updated", {
+                targetType: "player",
+                targetColor: "black",
+                isAdmin: true
+            });
+            return;
+        }
+
+        const spectator = room.spectators[socket.id];
+        if (spectator) {
+            spectator.isAdmin = true;
+            io.in(data.password).emit("permission-updated", {
+                targetType: "spectator",
+                spectatorId: spectator.id,
+                isAdmin: true
+            });
+            emitSpectatorList(data.password);
+        }
+    });
+
+    socket.on("request-admin-list", (data) => {
+        const room = rooms[data.password];
+        if (!room) return;
+
+        socket.emit("admin-list", {
+            white: { name: room.players.whiteName || "White", isAdmin: !!room.players.whiteAdmin },
+            black: { name: room.players.blackName || "Black", isAdmin: !!room.players.blackAdmin },
+            spectators: buildSpectatorList(room)
+        });
     });
 
     socket.on("send-move", (data) => {
@@ -206,6 +255,9 @@ io.on("connection", (socket) => {
             emitSpectatorList(data.password);
             return;
         }
+
+        if (data.targetColor === "white") room.players.whiteAdmin = data.isAdmin;
+        if (data.targetColor === "black") room.players.blackAdmin = data.isAdmin;
 
         io.in(data.password).emit("permission-updated", {
             targetType: "player",
