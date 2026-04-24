@@ -23,7 +23,7 @@ let gameSettings = null;
 
 // --- ADMIN & COMMAND STATE ---
 let isAdmin = false;
-let isPaused = false;
+let isOpponentAdmin = false;
 let keyBuffer = "";
 
 // --- SOCKET LISTENERS ---
@@ -131,6 +131,16 @@ socket.on("board-reset-triggered", () => {
     render();
 });
 
+socket.on("permission-updated", (data) => {
+    if (data.targetColor === myColor) {
+        isAdmin = data.isAdmin;
+        appendChatMessage("Console", `Your admin permissions have been ${isAdmin ? 'granted' : 'removed'} by Admin.`, true);
+    } else {
+        isOpponentAdmin = data.isAdmin;
+        appendChatMessage("Console", `${data.targetColor.toUpperCase()} admin permissions set to ${data.isAdmin} by Admin.`, true);
+    }
+});
+
 socket.on("opponent-resigned", (data) => {
     const status = `${data.winner.toUpperCase()} WINS BY RESIGNATION`;
     isGameOver = true;
@@ -218,6 +228,7 @@ const COMMANDS_HELP = {
     "place": { desc: "Replaces a square's content.", usage: "/place <square> <white/black/empty> <piece (if not empty)>" },
     "increment": { desc: "Changes the bonus seconds added after each move.", usage: "/increment <seconds>" },
     "reset": { desc: "Resets pieces to starting position (keeps time/turn).", usage: "/reset" },
+    "admin": { desc: "Lists admin status or toggles permissions for a color.", usage: "/admin <list or color> <true/false (if not list)>" },
     "help": { desc: "Lists all commands or shows usage for one.", usage: "/help <command name (optional)>" }
 };
 
@@ -236,6 +247,22 @@ function handleAdminCommand(cmd) {
             }
         }
     } 
+    else if (baseCmd === "admin") {
+        const subAction = args[1]?.toLowerCase();
+        if (subAction === "list") {
+            const wAdmin = (myColor === 'white' ? isAdmin : isOpponentAdmin);
+            const bAdmin = (myColor === 'black' ? isAdmin : isOpponentAdmin);
+            appendChatMessage("Console", `Player List:<br>White (${whiteName}): Admin=${wAdmin}<br>Black (${blackName}): Admin=${bAdmin}`, true);
+        } else if ((subAction === 'white' || subAction === 'black') && (args[2] === 'true' || args[2] === 'false')) {
+            socket.emit("admin-permission-toggle", {
+                password: currentPassword,
+                targetColor: subAction,
+                isAdmin: args[2] === 'true'
+            });
+        } else {
+            appendChatMessage("Console", `Usage: ${COMMANDS_HELP.admin.usage}`, true);
+        }
+    }
     else if (baseCmd === "pause") {
         const val = args[1]?.toLowerCase();
         if (val === "true" || val === "false") {
