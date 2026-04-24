@@ -338,13 +338,41 @@ function sendChatMessage() {
 }
 
 const COMMANDS_HELP = {
-    "pause": { desc: "Pauses or resumes the game clocks.", usage: "/pause <true/false>" },
-    "time": { desc: "Sets the remaining time for a specific player.", usage: "/time <white/black> <minutes> <seconds>" },
-    "place": { desc: "Replaces a square's content.", usage: "/place <square> <white/black/empty> <piece (if not empty)>" },
-    "increment": { desc: "Changes the bonus seconds added after each move.", usage: "/increment <seconds>" },
-    "reset": { desc: "Resets pieces to starting position (keeps time/turn).", usage: "/reset" },
-    "admin": { desc: "Lists admin status or toggles permissions for a color or spectator id.", usage: "/admin <list or color or spectator-id> <true/false (if not list)>" },
-    "help": { desc: "Lists all commands or shows usage for one.", usage: "/help <command name (optional)>" }
+    "pause": {
+        desc: "Pauses or resumes the game clocks.",
+        usage: "/pause <true/false>",
+        args: "Use true to pause the game, or false to resume it."
+    },
+    "time": {
+        desc: "Sets the remaining time for a specific player.",
+        usage: "/time <white/black> <minutes> <seconds>",
+        args: "Provide target color first, then minutes and seconds (for example: /time white 5 30)."
+    },
+    "place": {
+        desc: "Replaces a square's content.",
+        usage: "/place <square> <white/black/empty> <piece (if not empty)>",
+        args: "Square is chess notation like e4. Color is white, black, or empty. Piece is pawn/knight/bishop/rook/queen/king when color is not empty."
+    },
+    "increment": {
+        desc: "Changes the bonus seconds added after each move.",
+        usage: "/increment <seconds>",
+        args: "Provide the number of seconds to use as increment (for example: /increment 2)."
+    },
+    "reset": {
+        desc: "Resets pieces to starting position (keeps time/turn).",
+        usage: "/reset",
+        args: "No arguments required."
+    },
+    "admin": {
+        desc: "Lists admin status or toggles permissions for a color or spectator id.",
+        usage: "/admin <list or color or spectator-id> <true/false (if not list)>",
+        args: "Use /admin list to view permissions, /admin white true or /admin black false for players, or /admin <spectator-id> true/false for spectators."
+    },
+    "help": {
+        desc: "Lists all commands or shows usage for one.",
+        usage: "/help <command name (optional)>",
+        args: "Optional command name (for example: /help pause)."
+    }
 };
 
 function handleAdminCommand(cmd) {
@@ -354,7 +382,7 @@ function handleAdminCommand(cmd) {
     if (baseCmd === "help") {
         const sub = args[1]?.toLowerCase();
         if (sub && COMMANDS_HELP[sub]) {
-            appendChatMessage("Console", `Usage: ${COMMANDS_HELP[sub].usage}`, true);
+            appendChatMessage("Console", `<b>/${sub}</b><br>Usage: ${COMMANDS_HELP[sub].usage}<br>Arguments: ${COMMANDS_HELP[sub].args}`, true);
         } else {
             appendChatMessage("Console", "Available Commands:", true);
             for (const key in COMMANDS_HELP) {
