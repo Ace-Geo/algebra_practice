@@ -61,7 +61,7 @@ body { background: radial-gradient(circle at top, #2a2242 0%, #161321 50%, #0e0b
 #rematch-btn:hover { transform: translateY(-1px) scale(1.03); filter: brightness(1.06); }
 
 /* The Red Cancel State */
-.cancel-state { background: #c64242 !important; color: white; }␊
+.cancel-state { background: #c64242 !important; color: white; }
 
 .rematch-ready { animation: pulse 1.5s infinite; background: #8dbb5c !important; }
 @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
