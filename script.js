@@ -799,6 +799,7 @@ function render(forcedStatus) {
         renderCoupGame(layout);
         return;
     }
+    layout.className = "";
 
     if (!document.getElementById('chat-panel')) {
         const chatPanel = document.createElement('div');
@@ -1162,20 +1163,82 @@ function returnToCoupTitlePage() {
 
 function renderCoupGame(layout) {
     layout.innerHTML = "";
+    layout.className = "coup-layout";
     const me = (coupGameState.players || []).find((p) => p.socketId === socket.id);
     const isMyTurn = coupGameState.currentTurnSocketId === socket.id;
     const pending = coupGameState.pending;
     const myCards = coupGameState.myCards || [];
     const isAlive = !!(me && me.alive);
+    const aliveCount = (coupGameState.players || []).filter((p) => p.alive).length;
+    const phaseText = getCoupPhaseText();
 
-    const left = document.createElement('div');
-    left.id = 'chat-panel';
-    left.innerHTML = `
-        <div id="chat-header">COUP LOG</div>
-        <div id="chat-messages"></div>
+    const main = document.createElement('div');
+    main.className = "coup-main-column";
+
+    const topPanel = document.createElement('div');
+    topPanel.className = "coup-panel coup-top-panel";
+    topPanel.innerHTML = `
+        <div class="coup-title-wrap">
+            <div class="coup-title">Coup - Standard</div>
+            <button class="action-btn coup-rules-btn" onclick="showCoupRulesPopup()">Rules</button>
+        </div>
+        <div class="coup-top-stats">
+            <span>Deck: <b>${coupGameState.deckCount ?? 0}</b></span>
+            <span>Alive: <b>${aliveCount}</b></span>
+            <span>Status: <b>${phaseText}</b></span>
+        </div>
     `;
-    layout.appendChild(left);
-    const logBox = left.querySelector('#chat-messages');
+    main.appendChild(topPanel);
+
+    const playersPanel = document.createElement('div');
+    playersPanel.className = "coup-panel";
+    const rowsClass = (coupGameState.players || []).length < 4 ? "one-row" : "";
+    playersPanel.innerHTML = `
+        <div class="coup-players-grid ${rowsClass}">
+            ${(coupGameState.players || []).map((player) => renderCoupPlayerPanel(player)).join("")}
+        </div>
+    `;
+    main.appendChild(playersPanel);
+
+    const actionsPanel = document.createElement('div');
+    actionsPanel.className = "coup-panel coup-actions-panel";
+    const actionDisabled = !isMyTurn || !isAlive || coupGameState.phase !== "turn";
+    const targetOptions = (coupGameState.players || [])
+        .filter((p) => p.socketId !== socket.id && p.alive)
+        .map((p) => `<option value="${p.socketId}">${p.name}</option>`)
+        .join("");
+    actionsPanel.innerHTML = `
+        <div class="coup-section-title">Choose Your Action</div>
+        <div class="coup-action-grid">
+            ${renderActionCard("income", "+1 coin (safe)", "c-action-income", actionDisabled, false)}
+            ${renderActionCard("foreign_aid", "+2 coins (blockable)", "c-action-aid", actionDisabled, false)}
+            ${renderActionCard("tax", "+3 coins (challengeable: Duke)", "c-action-tax", actionDisabled, false)}
+            ${renderActionCard("exchange", "Swap with deck (challengeable: Ambassador)", "c-action-exchange", actionDisabled, false)}
+        </div>
+        <div class="coup-section-title" style="margin-top:12px;">Targeted Actions</div>
+        <div style="margin-bottom:10px;">
+            <select id="coup-target-select" class="coup-target-select">${targetOptions}</select>
+        </div>
+        <div class="coup-target-grid">
+            ${renderActionCard("steal", "Take up to 2 coins (blockable)", "c-action-steal", actionDisabled, true)}
+            ${renderActionCard("assassinate", "Pay 3 to remove influence (blockable)", "c-action-assassinate", actionDisabled, true)}
+            ${renderActionCard("coup", "Pay 7 to force influence loss (unblockable)", "c-action-coup", actionDisabled, true)}
+        </div>
+        <div id="coup-prompt-area" style="margin-top:12px;"></div>
+        <button class="action-btn" style="margin-top:10px; width:100%;" onclick="location.reload()">Return to Title</button>
+    `;
+    main.appendChild(actionsPanel);
+    layout.appendChild(main);
+
+    const logPanel = document.createElement('div');
+    logPanel.className = "coup-log-column";
+    logPanel.innerHTML = `
+        <div class="coup-log-header">GAME LOG</div>
+        <div class="coup-log-body" id="coup-log-body"></div>
+    `;
+    layout.appendChild(logPanel);
+
+    const logBox = document.getElementById('coup-log-body');
     (coupGameState.log || []).forEach((entry) => {
         const div = document.createElement('div');
         div.className = 'chat-msg system';
@@ -1183,56 +1246,6 @@ function renderCoupGame(layout) {
         logBox.appendChild(div);
     });
     logBox.scrollTop = logBox.scrollHeight;
-
-    const center = document.createElement('div');
-    center.id = 'game-area';
-    const playerCards = (coupGameState.players || []).map((player) => `
-        <div style="background:#1f1a2e; border:1px solid #4b3f70; border-radius:8px; padding:10px; margin-bottom:10px;">
-            <div><b>${player.name}</b>${player.socketId === coupGameState.currentTurnSocketId ? " (TURN)" : ""}${player.socketId === socket.id ? " (YOU)" : ""}</div>
-            <div>Coins: ${player.coins}</div>
-            <div>Influence: ${player.influence}</div>
-            <div>Revealed: ${(player.revealedCards || []).join(", ") || "None"}</div>
-        </div>
-    `).join("");
-
-    center.innerHTML = `
-        <div id="board-container" style="width:100%;">
-            <h2 style="margin-top:0; color:#ff9f43;">Coup</h2>
-            <div>${playerCards}</div>
-        </div>
-    `;
-    layout.appendChild(center);
-
-    const right = document.createElement('div');
-    right.id = 'side-panel';
-
-    const actionDisabled = !isMyTurn || !isAlive || coupGameState.phase !== "turn";
-    const targetOptions = (coupGameState.players || [])
-        .filter((p) => p.socketId !== socket.id && p.alive)
-        .map((p) => `<option value="${p.socketId}">${p.name}</option>`)
-        .join("");
-
-    right.innerHTML = `
-        <div id="status-box"><div id="status-text">${coupGameState.phase === "game-over" ? "GAME OVER" : (isMyTurn ? "YOUR TURN" : "WAITING")}</div></div>
-        <div style="background:#2a2242; border:1px solid #4b3f70; border-radius:8px; padding:10px;">
-            <div style="font-size:12px; color:#bababa;">YOUR INFLUENCE</div>
-            <div>${myCards.map((c) => c.revealed ? `(${c.role})` : c.role).join(" • ") || "None"}</div>
-            <div style="margin-top:6px;">Coins: ${me ? me.coins : 0}</div>
-        </div>
-        <div id="coup-prompt-area" style="margin-top:10px;"></div>
-        <div style="display:grid; gap:8px; margin-top:10px;">
-            <button class="action-btn" ${actionDisabled ? "disabled" : ""} onclick="sendCoupAction('income')">Income (+1)</button>
-            <button class="action-btn" ${actionDisabled ? "disabled" : ""} onclick="sendCoupAction('foreign_aid')">Foreign Aid (+2)</button>
-            <button class="action-btn" ${actionDisabled ? "disabled" : ""} onclick="sendCoupAction('tax')">Tax (Duke)</button>
-            <button class="action-btn" ${actionDisabled ? "disabled" : ""} onclick="sendCoupAction('exchange')">Exchange (Ambassador)</button>
-            <button class="action-btn" ${actionDisabled ? "disabled" : ""} onclick="sendCoupAction('steal', getCoupTarget())">Steal</button>
-            <button class="action-btn" ${actionDisabled ? "disabled" : ""} onclick="sendCoupAction('assassinate', getCoupTarget())">Assassinate</button>
-            <button class="action-btn" ${actionDisabled ? "disabled" : ""} onclick="sendCoupAction('coup', getCoupTarget())">Coup</button>
-            <select id="coup-target-select">${targetOptions}</select>
-            <button class="action-btn" onclick="location.reload()">Return to Title</button>
-        </div>
-    `;
-    layout.appendChild(right);
 
     renderCoupPrompt(pending);
 }
@@ -1290,6 +1303,62 @@ function renderCoupPrompt(pending) {
             </div>
         `;
     }
+}
+
+function getCoupPhaseText() {
+    if (!coupGameState) return "Waiting";
+    if (coupGameState.phase === "game-over") return "Game Over";
+    if (coupGameState.pending?.kind === "action") return "Action / Challenge Window";
+    if (coupGameState.pending?.kind === "block") return "Block Window";
+    if (coupGameState.phase === "resolving") return "Resolving";
+    return "Action";
+}
+
+function renderCoupPlayerPanel(player) {
+    const me = socket.id === player.socketId;
+    const turn = coupGameState.currentTurnSocketId === player.socketId;
+    const waitingOnAction = coupGameState.phase === "turn" && turn;
+    const waitingOnResponse = coupGameState.phase === "resolving" && coupGameState.pending && player.alive;
+    const indicator = waitingOnAction ? "Choosing Action" : (waitingOnResponse ? "Waiting / Respond" : "Idle");
+    const myCards = me ? (coupGameState.myCards || []) : [];
+    const revealedCards = player.revealedCards || [];
+    const hiddenCount = Math.max(0, player.influence);
+    const cards = [];
+
+    if (me) {
+        myCards.forEach((card) => {
+            cards.push(`<div class="coup-card ${card.revealed ? 'revealed' : ''} ${card.revealed ? 'role-' + card.role : 'role-' + card.role}">
+                <span>${card.role}</span>
+            </div>`);
+        });
+    } else {
+        for (let i = 0; i < hiddenCount; i++) cards.push('<div class="coup-card hidden-card"></div>');
+        revealedCards.forEach((role) => cards.push(`<div class="coup-card revealed role-${role}"><span>${role}</span></div>`));
+    }
+
+    return `
+        <div class="coup-player-panel ${!player.alive ? 'eliminated' : ''}">
+            <div class="coup-player-head">
+                <div><b>${player.name}</b> ${me ? '<span class="tag-you">YOU</span>' : ''}</div>
+                <div class="coins">${player.coins} coins</div>
+            </div>
+            <div class="coup-indicators">
+                ${turn ? '<span class="tag-turn">TURN</span>' : ''}
+                ${player.alive ? `<span class="tag-wait">${indicator}</span>` : '<span class="tag-out">OUT</span>'}
+            </div>
+            <div class="coup-cards-row">${cards.join("")}</div>
+        </div>
+    `;
+}
+
+function renderActionCard(action, desc, cssClass, disabled, targeted) {
+    const targetArg = targeted ? ", getCoupTarget()" : "";
+    return `
+        <button class="coup-action-card ${cssClass} ${targeted ? 'targeted' : ''}" ${disabled ? "disabled" : ""} onclick="sendCoupAction('${action}'${targetArg})">
+            <div class="name">${action.replace('_', ' ').toUpperCase()}</div>
+            <div class="desc">${desc}</div>
+        </button>
+    `;
 }
 
 function openSpectateMenu() {
