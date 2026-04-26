@@ -333,11 +333,11 @@ socket.on("coup-lobby-update", (data) => {
     renderSetupCard();
 });
 
-socket.on("coup-kicked", () => {
-    alert("You were removed from the Coup room.");
-    selectedGame = "coup";
-    setupView = "coup-menu";
-    coupLobby = null;
+socket.on("coup-kicked", () => {␊
+    alert("You were removed from the Coup room.");␊
+    selectedGame = "coup";␊
+    setupView = "coup-menu";␊
+    coupLobby = null;␊
     currentPassword = null;
     renderSetupCard();
 });
@@ -1036,7 +1036,7 @@ function renderSetupCard() {
         return;
     }
 
-    if (setupView === "coup-lobby" && coupLobby) {
+    if (setupView === "coup-lobby" && coupLobby) {␊
         const playersHtml = (coupLobby.players || []).map((player) => {
             const isHost = player.socketId === coupLobby.hostId;
             const canKick = socket.id === coupLobby.hostId && player.socketId !== socket.id;
@@ -1053,17 +1053,18 @@ function renderSetupCard() {
             ? (enoughPlayers ? "Start Game" : "Waiting for Players")
             : (enoughPlayers ? "Waiting for Host" : "Waiting for Players");
 
-        content.innerHTML = `
-            <h2 style="color:#779556; margin-top:0;">Coup Lobby</h2>
-            <div style="background:#1a1a1a; padding:12px; border-radius:8px; margin-bottom:12px; text-align:left;">
-                <div style="font-size:12px; color:#bababa;">ROOM PASSWORD</div>
-                <div style="font-size:20px; letter-spacing:2px;">${coupLobby.password}</div>
+        content.innerHTML = `␊
+            <h2 style="color:#779556; margin-top:0;">Coup Lobby</h2>␊
+            <div style="background:#1a1a1a; padding:12px; border-radius:8px; margin-bottom:12px; text-align:left;">␊
+                <div style="font-size:12px; color:#bababa;">ROOM PASSWORD</div>␊
+                <div style="font-size:20px; letter-spacing:2px;">${coupLobby.password}</div>␊
             </div>
             <div style="text-align:left; margin-bottom:10px;"><b>Players</b></div>
             <div style="max-height:220px; overflow-y:auto; text-align:left;">${playersHtml || "<div>No players yet.</div>"}</div>
             <button class="start-btn" style="margin-top:10px;" ${iAmHost && enoughPlayers ? 'onclick="startCoupGame()"' : "disabled"}>${statusLabel}</button>
             <button class="action-btn" style="margin-top:10px; width:100%;" onclick="changeCoupName()">Change Name</button>
-            <button class="action-btn" style="margin-top:10px; width:100%;" onclick="location.reload()">Leave Lobby</button>
+            <button class="action-btn" style="margin-top:10px; width:100%;" onclick="leaveCoupLobby()">Leave Lobby</button>
+            <button class="action-btn" style="margin-top:10px; width:100%;" onclick="returnToCoupTitlePage()">Return to Coup Title Page</button>
         `;
     }
 }
@@ -1120,6 +1121,21 @@ function kickCoupPlayer(targetSocketId) {
 function startCoupGame() {
     if (!coupLobby || !currentPassword) return;
     socket.emit("coup-start-game", { password: currentPassword });
+}
+
+function leaveCoupLobby() {
+    if (currentPassword) {
+        socket.emit("coup-leave-room", { password: currentPassword });
+    }
+    selectedGame = "coup";
+    setupView = "coup-menu";
+    coupLobby = null;
+    currentPassword = null;
+    renderSetupCard();
+}
+
+function returnToCoupTitlePage() {
+    leaveCoupLobby();
 }
 
 function openSpectateMenu() {
