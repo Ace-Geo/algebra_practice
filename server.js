@@ -6,6 +6,41 @@ const io = require("socket.io")(http, { cors: { origin: "*" } });
 const PORT = process.env.PORT || 3000;
 const rooms = {};
 const roomRematchStates = {};
+const coupRooms = {};
+
+function getCoupSocketRoom(password) {
+    return `coup:${password}`;
+}
+
+function emitCoupLobbyUpdate(password) {
+    const room = coupRooms[password];
+    if (!room) return;
+    io.in(getCoupSocketRoom(password)).emit("coup-lobby-update", {
+        password: room.password,
+        hostId: room.hostId,
+        players: room.players.map((player) => ({ socketId: player.socketId, name: player.name }))
+    });
+}
+
+function removePlayerFromCoupRoom(password, socketId) {
+    const room = coupRooms[password];
+    if (!room) return;
+
+    const index = room.players.findIndex((player) => player.socketId === socketId);
+    if (index === -1) return;
+
+    room.players.splice(index, 1);
+    if (!room.players.length) {
+        delete coupRooms[password];
+        return;
+    }
+
+    if (room.hostId === socketId) {
+        room.hostId = room.players[0].socketId;
+    }
+
+    emitCoupLobbyUpdate(password);
+}
 
 function getNextSpectatorId(room) {
     const used = new Set(Object.values(room.spectators).map((s) => s.id));
@@ -74,7 +109,7 @@ io.on("connection", (socket) => {
         });
     });
 
-    socket.on("confirm-join", (data) => {
+    socket.on("confirm-join", (data) => {␊
         const { password, name } = data;
         const room = rooms[password];
         if (!room || room.status !== "waiting") return;
@@ -110,6 +145,103 @@ io.on("connection", (socket) => {
             settings: room.settings,
             oppName: room.creatorName
         });
+    });
+
+    socket.on("coup-create-room", (data) => {
+        const password = (data.password || "").trim();
+        const name = (data.name || "").trim();
+        if (!password || !name) {
+            socket.emit("error-msg", "Room password and username are required.");
+            return;
+        }
+        if (coupRooms[password]) {
+            socket.emit("error-msg", "Room password already in use.");
+            return;
+        }
+
+        const socketRoom = getCoupSocketRoom(password);
+        socket.join(socketRoom);
+        coupRooms[password] = {
+            password,
+            hostId: socket.id,
+            status: "lobby",
+            players: [{ socketId: socket.id, name }]
+        };
+        emitCoupLobbyUpdate(password);
+    });
+
+    socket.on("coup-join-room", (data) => {
+        const password = (data.password || "").trim();
+        const name = (data.name || "").trim();
+        if (!password || !name) {
+            socket.emit("error-msg", "Room password and username are required.");
+            return;
+        }
+
+        const room = coupRooms[password];
+        if (!room) {
+            socket.emit("error-msg", "Room not found.");
+            return;
+        }
+        if (room.status !== "lobby") {
+            socket.emit("error-msg", "Game already started.");
+            return;
+        }
+        if (room.players.some((player) => player.socketId === socket.id)) {
+            emitCoupLobbyUpdate(password);
+            return;
+        }
+
+        socket.join(getCoupSocketRoom(password));
+        room.players.push({ socketId: socket.id, name });
+        emitCoupLobbyUpdate(password);
+    });
+
+    socket.on("coup-change-name", (data) => {
+        const password = (data.password || "").trim();
+        const nextName = (data.name || "").trim();
+        if (!password || !nextName) return;
+
+        const room = coupRooms[password];
+        if (!room) return;
+
+        const player = room.players.find((p) => p.socketId === socket.id);
+        if (!player) return;
+        player.name = nextName;
+        emitCoupLobbyUpdate(password);
+    });
+
+    socket.on("coup-kick-player", (data) => {
+        const password = (data.password || "").trim();
+        const targetSocketId = data.targetSocketId;
+        const room = coupRooms[password];
+        if (!room) return;
+        if (room.hostId !== socket.id) return;
+        if (!targetSocketId || targetSocketId === socket.id) return;
+        if (!room.players.some((player) => player.socketId === targetSocketId)) return;
+
+        removePlayerFromCoupRoom(password, targetSocketId);
+        io.to(targetSocketId).emit("coup-kicked");
+        io.sockets.sockets.get(targetSocketId)?.leave(getCoupSocketRoom(password));
+    });
+
+    socket.on("coup-start-game", (data) => {
+        const password = (data.password || "").trim();
+        const room = coupRooms[password];
+        if (!room) return;
+        if (room.hostId !== socket.id) return;
+        if (room.players.length < 2) return;
+        room.status = "active";
+        io.in(getCoupSocketRoom(password)).emit("coup-start-placeholder", {
+            message: "Coup game start flow coming soon."
+        });
+    });
+
+    socket.on("coup-leave-room", (data) => {
+        const password = (data.password || "").trim();
+        if (!password) return;
+        removePlayerFromCoupRoom(password, socket.id);
+        socket.leave(getCoupSocketRoom(password));
     });
 
     socket.on("list-active-games", () => {
@@ -281,8 +413,8 @@ io.on("connection", (socket) => {
         }
     });
 
-    socket.on("disconnecting", () => {
-        Object.entries(rooms).forEach(([roomPass, room]) => {
+    socket.on("disconnecting", () => {␊
+        Object.entries(rooms).forEach(([roomPass, room]) => {␊
             if (room.spectators[socket.id]) {
                 delete room.spectators[socket.id];
                 emitSpectatorList(roomPass);
@@ -294,6 +426,12 @@ io.on("connection", (socket) => {
                 delete rooms[roomPass];
                 if (roomRematchStates[roomPass]) delete roomRematchStates[roomPass];
             }
+        });
+
+        Object.keys(coupRooms).forEach((password) => {
+            const room = coupRooms[password];
+            if (!room.players.some((player) => player.socketId === socket.id)) return;
+            removePlayerFromCoupRoom(password, socket.id);
         });
     });
 });
