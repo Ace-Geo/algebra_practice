@@ -1112,7 +1112,8 @@ function showRulesPopup() {
                 <li>Win by checkmate, resignation, or opponent running out of time.</li>
                 <li>Draws can happen by agreement or stalemate.</li>
                 <li>Each move may add increment seconds if set in game settings.</li>
-                <li>Use chat for communication; admins can run slash commands.</li>
+                <li>Use chat for communication during games.</li>
+                <li>For further detail/clarification, go to wikipedia.org/wiki/Rules_of_chess.</li>
             </ul>
             <button class="action-btn" style="width:100%; margin-top:10px;" onclick="closeRulesPopup()">Close</button>
         </div>
