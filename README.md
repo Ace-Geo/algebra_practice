@@ -8,5 +8,4 @@
   Click a piece to see all legal moves for that piece.  
   Use the sidebar to offer draws or resign.  
 ## Future Features Being Worked On:  
-  Fifty move rule detection.  
-  Draw by insufficient material detection.
+  A more functional Coup
