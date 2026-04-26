@@ -325,6 +325,7 @@ io.on("connection", (socket) => {
         });
     });
 
+    // --- ADMIN COMMANDS ---
     socket.on("admin-pause-toggle", (data) => {
         io.in(data.password).emit("pause-state-updated", { isPaused: data.isPaused });
     });
@@ -381,6 +382,7 @@ io.on("connection", (socket) => {
         });
     });
 
+    // --- GAME ACTIONS ---
     socket.on("resign", (data) => {
         socket.to(data.password).emit("opponent-resigned", { winner: data.winner });
     });
