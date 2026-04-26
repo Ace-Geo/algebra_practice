@@ -6,11 +6,6 @@ const io = require("socket.io")(http, { cors: { origin: "*" } });
 const PORT = process.env.PORT || 3000;
 const rooms = {};
 const roomRematchStates = {};
-const coupRooms = {};
-
-function normalizeText(value) {
-    return (value || "").trim();
-}
 
 function getNextSpectatorId(room) {
     const used = new Set(Object.values(room.spectators).map((s) => s.id));
@@ -40,20 +35,6 @@ function buildActiveGames() {
             blackName: room.players.blackName || "Black",
             settings: room.settings
         }));
-}
-
-function emitCoupLobby(roomPass) {
-    const room = coupRooms[roomPass];
-    if (!room) return;
-    const players = room.playerOrder
-        .map((id) => room.players[id])
-        .filter(Boolean)
-        .map((p) => ({ socketId: p.socketId, name: p.name }));
-    io.in(roomPass).emit("coup-lobby-update", {
-        password: room.password,
-        hostId: room.hostId,
-        players
-    });
 }
 
 io.on("connection", (socket) => {
@@ -300,80 +281,21 @@ io.on("connection", (socket) => {
         }
     });
 
-    // --- COUP LOBBY SETUP ---
-    socket.on("coup-create-room", (data) => {
-        const password = normalizeText(data.password);
-        const name = normalizeText(data.name);
-        if (!password || !name) {
-            socket.emit("error-msg", "Room password and username are required.");
-            return;
-        }
-        if (coupRooms[password]) {
-            socket.emit("error-msg", "Room password already in use.");
-            return;
-        }
-
-        socket.join(password);
-        coupRooms[password] = {
-            password,
-            hostId: socket.id,
-            playerOrder: [socket.id],
-            players: {
-                [socket.id]: { socketId: socket.id, name }
+    socket.on("disconnecting", () => {
+        Object.entries(rooms).forEach(([roomPass, room]) => {
+            if (room.spectators[socket.id]) {
+                delete room.spectators[socket.id];
+                emitSpectatorList(roomPass);
+                return;
             }
-        };
-        emitCoupLobby(password);
-    });
 
-    socket.on("coup-join-room", (data) => {
-        const password = normalizeText(data.password);
-        const name = normalizeText(data.name);
-        if (!password || !name) {
-            socket.emit("error-msg", "Room password and username are required.");
-            return;
-        }
-        const room = coupRooms[password];
-        if (!room) {
-            socket.emit("error-msg", "Coup room not found.");
-            return;
-        }
-        if (room.players[socket.id]) {
-            emitCoupLobby(password);
-            return;
-        }
-
-        socket.join(password);
-        room.players[socket.id] = { socketId: socket.id, name };
-        room.playerOrder.push(socket.id);
-        emitCoupLobby(password);
-    });
-
-    socket.on("coup-change-name", (data) => {
-        const room = coupRooms[data.password];
-        if (!room || !room.players[socket.id]) return;
-        const nextName = normalizeText(data.name);
-        if (!nextName) return;
-        room.players[socket.id].name = nextName;
-        emitCoupLobby(data.password);
-    });
-
-    socket.on("coup-kick-player", (data) => {
-        const room = coupRooms[data.password];
-        if (!room || room.hostId !== socket.id) return;
-        if (!room.players[data.targetSocketId]) return;
-
-        io.to(data.targetSocketId).emit("coup-kicked", { password: data.password });
-        io.sockets.sockets.get(data.targetSocketId)?.leave(data.password);
-        delete room.players[data.targetSocketId];
-        room.playerOrder = room.playerOrder.filter((id) => id !== data.targetSocketId);
-        emitCoupLobby(data.password);
-    });
-
-    socket.on("coup-start-game", (data) => {
-        const room = coupRooms[data.password];
-        if (!room || room.hostId !== socket.id) return;
-        if (room.playerOrder.length < 2) return;
-        io.in(data.password).emit("coup-start-placeholder", {
-            message: "Coup gameplay is not added yet. Lobby flow is ready."
+            const isPlayer = room.creatorId === socket.id || room.players.white === socket.id || room.players.black === socket.id;
+            if (isPlayer) {
+                delete rooms[roomPass];
+                if (roomRematchStates[roomPass]) delete roomRematchStates[roomPass];
+            }
         });
     });
+});
+
+http.listen(PORT, () => console.log(`Server running on port ${PORT}`));
