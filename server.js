@@ -424,20 +424,19 @@ io.on("connection", (socket) => {
                     pending.canceled = true;
                 }
                 pending.passes = game.players.filter((p) => p.alive && p.socketId !== actor.socketId).map((p) => p.socketId);
-            } else if (response === "block" && pending.targetId === responder.socketId && pending.blockRoles.length) {
-                pending.kind = "block";
-                pending.blockerId = responder.socketId;
-                pending.blockerName = responder.name;
-                pending.blockClaim = data.blockRole || pending.blockRoles[0];
-                pending.passes = [];
-                appendCoupLog(room, `${responder.name} blocks with ${pending.blockClaim}.`);
-                emitCoupGameState(password);
-                return;
             }
 
             const requiredPasses = game.players.filter((p) => p.alive && p.socketId !== actor.socketId).map((p) => p.socketId);
             const allPassed = requiredPasses.every((id) => pending.passes.includes(id));
             if (!allPassed) {
+                emitCoupGameState(password);
+                return;
+            }
+
+            if (!pending.canceled && pending.targetId && pending.blockRoles.length) {
+                pending.kind = "block-offer";
+                pending.passes = [];
+                appendCoupLog(room, `Challenge window closed. Waiting for ${pending.targetName} to block or allow.`);
                 emitCoupGameState(password);
                 return;
             }
@@ -477,6 +476,33 @@ io.on("connection", (socket) => {
                 appendCoupLog(room, `${actor.name}'s action resolves: ${pending.action.replace("_", " ")}.`);
             } else {
                 appendCoupLog(room, `Action ${pending.action.replace("_", " ")} was canceled.`);
+            }
+        } else if (pending.kind === "block-offer") {
+            if (socket.id !== pending.targetId) return;
+            if (response === "block") {
+                pending.kind = "block";
+                pending.blockerId = pending.targetId;
+                pending.blockerName = pending.targetName;
+                pending.blockClaim = data.blockRole || pending.blockRoles[0];
+                pending.passes = [];
+                appendCoupLog(room, `${pending.blockerName} blocks with ${pending.blockClaim}.`);
+                emitCoupGameState(password);
+                return;
+            }
+
+            if (response === "pass") {
+                appendCoupLog(room, `${pending.targetName} allows the action.`);
+                const target = pending.targetId ? game.players.find((p) => p.socketId === pending.targetId) : null;
+                if (pending.action === "assassinate") {
+                    actor.coins -= 3;
+                    if (target) loseOneInfluence(room, target.socketId, "assassinated");
+                }
+                if (pending.action === "steal" && target) {
+                    const amount = Math.min(2, target.coins);
+                    target.coins -= amount;
+                    actor.coins += amount;
+                }
+                appendCoupLog(room, `${actor.name}'s action resolves: ${pending.action.replace("_", " ")}.`);
             }
         } else if (pending.kind === "block") {
             if (responder.socketId === pending.blockerId) return;
