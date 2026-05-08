@@ -325,6 +325,10 @@ socket.on("rematch-start", () => {
 });
 
 socket.on("error-msg", (msg) => { alert(msg); });
+socket.on("room-closed", (data) => {
+    alert(data?.message || "The room closed because a player disconnected.");
+    location.reload();
+});
 
 socket.on("coup-lobby-update", (data) => {
     selectedGame = "coup";
@@ -623,6 +627,8 @@ function canMoveTo(fromR, fromC, toR, toC, piece, board) {
         return false;
     }
     if ((piece === '♔' || piece === '♚') && adc === 2) {
+        if (adr !== 0 || toR !== fromR) return false;
+        if (!(toC === 2 || toC === 6)) return false;
         if (hasMoved[`${fromR},${fromC}`]) return false;
         if (isSquareAttacked(fromR, fromC, team === 'white' ? 'black' : 'white', board)) return false;
         const rookCol = toC === 6 ? 7 : 0;
@@ -659,6 +665,12 @@ function isTeamInCheck(team, board) {
 function isMoveLegal(fromR, fromC, toR, toC, team) {
     const piece = boardState[fromR][fromC];
     if (!canMoveTo(fromR, fromC, toR, toC, piece, boardState)) return false;
+    if ((piece === '♔' || piece === '♚') && Math.abs(toC - fromC) === 2) {
+        const enemy = team === 'white' ? 'black' : 'white';
+        const step = toC > fromC ? 1 : -1;
+        if (isSquareAttacked(fromR, fromC + step, enemy, boardState)) return false;
+        if (isSquareAttacked(toR, toC, enemy, boardState)) return false;
+    }
     const nextBoard = boardState.map(row => [...row]);
     nextBoard[toR][toC] = piece;
     nextBoard[fromR][fromC] = '';
