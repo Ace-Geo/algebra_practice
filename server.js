@@ -737,6 +737,9 @@ io.on("connection", (socket) => {
 
             const isPlayer = room.creatorId === socket.id || room.players.white === socket.id || room.players.black === socket.id;
             if (isPlayer) {
+                socket.to(roomPass).emit("room-closed", {
+                    message: "Your opponent disconnected. The room has been closed."
+                });
                 delete rooms[roomPass];
                 if (roomRematchStates[roomPass]) delete roomRematchStates[roomPass];
             }
